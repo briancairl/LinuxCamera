@@ -13,6 +13,10 @@
 ///
 ///	@author Brian Cairl
 /// @date 	July, 2014 [rev:1.0]
+///
+///	@todo	Time-sequenced constant-capture mode?
+/// @todo	Video streaming mode? (With OpenCV VideoWriter)
+///
 #ifndef LINUX_CAMERA_HPP
 #define LINUX_CAMERA_HPP
 
@@ -86,9 +90,11 @@
 		typedef std::list<cv::IplImage*> FrameBuf;
 
 
+
+
 		class LinuxCamera
 		{		
-		friend void 		captureLoop( LinuxCamera* cam );
+		friend void 		s_capture_loop( LinuxCamera* cam );
 		private:
 			int 			fd;
 			struct timeval 	tv;
@@ -99,11 +105,13 @@
 			uint16_t		frame_height;
 			uint16_t 		framerate;
 			uint16_t 		timeout;
+			uint32_t 		usleep_len;
 		
 			PixelFormat 	pixel_format;
 			Buffer*			buffers;
 			FrameBuf		frames;
 			uint16_t 		max_size;
+			uint32_t		capture_count;
 
 			boost::thread* 	proc_thread;
 
@@ -121,31 +129,86 @@
 			void 			_GrabFrame();
 			void 			_StoreFrame(const void *p, int size);
 			void 			_RegulateFrameBuffer();
-
+			bool 			_ScrollFrameBuffer();
 		public:
 
+			/// @brief 		Default
+			LinuxCamera();
+
+
+			/// @brief 		Constructor from XML-style configuration-file
+			///	@param 		fname 		config file name (*.conf)
 			LinuxCamera( 
-				const char* config_file 
+				const char* fname 
 			);
 			
+
+			/// @brief 		Primary 	Constructor
+			///	@param 		width 		image frame width 						(default is 640 pixels)
+			///	@param 		height		image frame height 						(default is 480 pixels)
+			///	@param 		fps 		image capture rate from camera device 	(default is 30  fps)
+			///	@param 		ormat 		pixel formate @see LC::PixelFormat 		(default is MPEG)
+			///	@param 		dev_name	device name 							(default is '/dev/video0')
 			LinuxCamera( 	
 				uint16_t 	width 	= 640, 
 				uint16_t 	height 	= 480, 
 				uint16_t 	fps 	= 30, 
 				PixelFormat format 	= PixelFormat::MPEG, 
-				const char* dev_name="/dev/video0" 
+				const char* dev_name= "/dev/video0"
 			);
 			
+
+			/// @brief Deconstructor
 			~LinuxCamera();
 
+
+			/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+			/// Statuses
+			/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+			/// @brief 		Returns TRUE if camera device was opened successfully and is current capturing (in-thread)
 			bool 			good();
+
+			/// @brief 		Returns TRUE if camera device was opened successfully
 			bool 			is_open();
+
+			// @brief 		Returns TRUE if camera is current capturing
 			bool 			is_capturing();
 
+
+			/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+			/// Capture Controls
+			/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+			// @brief 		Starts frame capturing
 			void 			start();
+
+			/// @brief 		Stops frame capturing
 			void 			stop();
 
-			void 			set_max( uint16_t _n );
+
+			/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+			/// Interfaces
+			/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+			///	@brief 		Sets the micro-sleep length (in micro-seconds) when the camera thread is idling
+			void 			set_usleep( uint32_t _n );
+
+			/// @brief 		Sets the max length of the frame-capture buffer
+			void 			set_max( uint16_t 	_n );
+
+			///	@brief		Returns the total number of captured frames
+			uint32_t 		get_capture_count();
+
+			/// @brief 		Returns the first un-released frame in the frame buffer
+			IplImage*		get_frame();
+
+			///	@brief 		Saves the first un-released frame to a file
+			bool 			save_frame( const char* fname );
+
+			/// @brief 		Releases first un-released frame and removes it from the frame buffer
+			///	@return 	TRUE 	if the frame buffer is not empty
+			bool 			operator++(void);
 		};
 
 	}

@@ -38,7 +38,7 @@ namespace LC
 
 
 
-	static void captureLoop( LinuxCamera* cam )
+	static void s_capture_loop( LinuxCamera* cam )
 	{
 		if( cam==NULL || !cam->is_open() ) )
 		{
@@ -50,11 +50,15 @@ namespace LC
 		{
 			if( LC_GET_FLAG(cam->flags, Flags::Capturing) )
 			{
+				/// Grab next frame
+				cam->_GrabFrame();
 
+				/// Maintain the frame-buffer
+				cam->_RegulateFrameBuffer();
 			}
 			else
 			{
-				usleep(10000UL);
+				usleep(cam->usleep_len);
 			}
 		}
 	}
@@ -287,7 +291,7 @@ namespace LC
 	{
 		if(proc_thread==NULL)
 		{
-			proc_thread = new boost::thread( captureLoop, this );
+			proc_thread = new boost::thread( s_capture_loop, this );
 			proc_thread->detach();
 
 			LC_SET_BIT(flags,Flags::ThreadActive);
@@ -377,31 +381,39 @@ namespace LC
 
 	void LinuxCamera::_StoreFrame(const void *p, int size)
 	{
-		if()
-			CvMat     mat;  
-  
-			mat = cvMat(
-			UserParams::frame_height, 
-			UserParams::frame_width, 
-			CV_8UC3, 
-			(void*)p
-			);  
+		// Get raw image from buffer
+		CvMat     mat = cvMat(frame_height, frame_width,CV_8UC3,(void*)p);  
 
-			// decode the image  
-			frame_buffer.emaplce_back(cvDecodeImage(&mat, 1));
-		}
+		// Decode the image  
+		frame_buffer.emplace_back(cvDecodeImage(&mat, 1));
+
+		// Count the capture
+		++capture_count;
 	}
 	
+
+
+	bool LinuxCamera::_ScrollFrameBuffer()
+	{
+		if( !frame_buffer.empty() && frame_buffer.front())
+		{
+			/// Release first image
+			cvReleaseImage(&frame_buffer.front());
+
+			/// Pop from buffer
+			frame_buffer.pop_front();
+
+			return true;
+		}
+		return false;
+	}
 
 
 
 	void LinuxCamera::_RegulateFrameBuffer()
 	{
 		if(!LC_GET_BIT(flag,Flags::ReadingFrame) && frame_buffer.size() > max_size )
-		{
-			
-
-		}
+			_ScrollFrameBuffer();
 	}
 
 
@@ -428,7 +440,9 @@ namespace LC
 		}  
 
 		assert(buf.index < n_buffers);  
-		handle_frame(buffers[buf.index].start, buf.bytesused);  
+
+		/// Send frame to Frame-Buffer
+		_StoreFrame(buffers[buf.index].start, buf.bytesused);  
 
 		if (-1 == xioctl(fd, VIDIOC_QBUF, &buf)) 
 			errno_exit("VIDIOC_QBUF");
@@ -478,16 +492,37 @@ namespace LC
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
+
+
+	LinuxCamera::LinuxCamera() :
+		frame_width		(640),
+		frame_height	(480),
+		framerate		(30),
+		dev_name 		(""),
+		timeout 		(1UL),
+		proc_thread		(NULL),
+		flags 			(0UL),
+		fd 				(-1),
+		max_size		(5UL),
+		capture_count	(0UL),
+		usleep_len 		(10000UL)
+	{}
+
+
+
+
 	LinuxCamera::LinuxCamera( uint16_t width, uint16_t height, uint16_t fps, const char* dev_name ) :
-		frame_width	(width),
-		frame_height(height),
-		framerate	(fps),
-		dev_name 	(dev_name),
-		timeout 	(1UL),
-		proc_thread	(NULL),
-		flags 		(0UL),
-		fd 			(-1),
-		max_size	(5UL)
+		frame_width		(width),
+		frame_height	(height),
+		framerate		(fps),
+		dev_name 		(dev_name),
+		timeout 		(1UL),
+		proc_thread		(NULL),
+		flags 			(0UL),
+		fd 				(-1),
+		max_size		(5UL),
+		capture_count	(0UL),
+		usleep_len 		(10000UL)
 	{
 		_OpenDevice();
 		_InitDevice();
@@ -558,13 +593,60 @@ namespace LC
 
 	void 	LinuxCamera::set_max( uint16_t _n ) 	
 	{ 	
-		if(_n>0) 
+		if(_n == 0) 
 		{
 			fprintf(stderr,LC_MSG("Frame buffer max-size must be NON-ZERO."));  
 			exit(EXIT_FAILURE);  
 		}
 		else 
-			abort(); 
+			max_size = _n; 
+	}
+
+
+
+	void 	LinuxCamera::set_usleep( uint32_t _n )
+	{
+		if(_n == 0) 
+		{
+			fprintf(stderr,LC_MSG("USleep len must be NON-ZERO."));  
+			exit(EXIT_FAILURE);  
+		}
+		else 
+			usleep_len = _n; 
+	}
+
+
+
+	uint32_t LinuxCamera::get_capture_count()
+	{
+		return capture_count;
+	}
+
+
+
+	bool 	LinuxCamera::operator++(void)
+	{
+		return _ScrollFrameBuffer()
+	}
+
+
+
+	IplImage*	LinuxCamera::get_frame()
+	{
+		if(frame_buffer.empty())
+			return NULL;
+		else
+			return frame_buffer.front();
+	}
+
+
+
+	bool 		LinuxCamera::save_frame(const char* fname)
+	{
+		if(frame_buffer.empty())
+			false;
+		else
+			return 	cvSaveImage(fname,frame_buffer.front(),NULL);
 	}
 
 
