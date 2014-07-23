@@ -16,6 +16,7 @@
 ///
 ///	@todo	Time-sequenced constant-capture mode?
 /// @todo	Video streaming mode? (With OpenCV VideoWriter)
+///	@todo	operator>> implementation for cv::Mat conversion
 ///
 #ifndef LINUX_CAMERA_HPP
 #define LINUX_CAMERA_HPP
@@ -48,6 +49,7 @@
 	/// CXX-STD
 	#include <string>
 	#include <list>
+	#include 
 
 
 	/// OpenCV Includes
@@ -136,7 +138,17 @@
 			LinuxCamera();
 
 
-			/// @brief 		Constructor from XML-style configuration-file
+			/// @brief 		Constructor from configuration-file.
+			///				Allowed Configuration File Tokens:
+			/// 			===================================
+ 			/// 			+ '-dev'	device name
+			/// 			+ '-w'		frame width
+			/// 			+ '-h'		frame height
+			/// 			+ '-fps'	framerate
+			/// 			+ '-t'		timeout (non-zero)
+			/// 			+ '-us'		usleep length (us)
+			/// 			+ '-fbuf'	max frame buffer size (non-zero)
+			///
 			///	@param 		fname 		config file name (*.conf)
 			LinuxCamera( 
 				const char* fname 
@@ -150,9 +162,9 @@
 			///	@param 		ormat 		pixel formate @see LC::PixelFormat 		(default is MPEG)
 			///	@param 		dev_name	device name 							(default is '/dev/video0')
 			LinuxCamera( 	
-				uint16_t 	width 	= 640, 
-				uint16_t 	height 	= 480, 
-				uint16_t 	fps 	= 30, 
+				uint16_t 	width 	= 640UL, 
+				uint16_t 	height 	= 480UL, 
+				uint16_t 	fps 	= 30UL, 
 				PixelFormat format 	= PixelFormat::MPEG, 
 				const char* dev_name= "/dev/video0"
 			);

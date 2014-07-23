@@ -14,14 +14,9 @@
 namespace LC
 {
 
-
-
-
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	/// HELPERS
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
 
 
 	static int xioctl(int fh, int request, void *arg) 
@@ -40,12 +35,15 @@ namespace LC
 
 	static void s_capture_loop( LinuxCamera* cam )
 	{
+		///	Bad camera check
 		if( cam==NULL || !cam->is_open() ) )
 		{
 			fprintf(stderr, LC_MSG("Could not start capture thread"));  
 			exit(EXIT_FAILURE);
 		}
 
+
+		/// So long as setups were successful, keep this running in the background.
 		for(;;)
 		{
 			if( LC_GET_FLAG(cam->flags, Flags::Capturing) )
@@ -53,7 +51,7 @@ namespace LC
 				/// Grab next frame
 				cam->_GrabFrame();
 
-				/// Maintain the frame-buffer
+				/// Maintain the frame-buffer (auto-release)
 				cam->_RegulateFrameBuffer();
 			}
 			else
@@ -507,6 +505,52 @@ namespace LC
 		capture_count	(0UL),
 		usleep_len 		(10000UL)
 	{}
+
+
+
+	LinuxCamera::LinuxCamera( const char* fname )
+	{
+		std::ifstream 	fconf(fname);
+		std::string 	token;
+		if(fconf.is_open())
+		{
+			while(!fconf.eof())
+			{
+				fconf >> token;
+				if(token=="-dev")
+					fconf >> dev_name;
+				else
+				if(token=="-w")
+					fconf >> frame_width;
+				else				
+				if(token=="-h")
+					fconf >> frame_height;
+				else	
+				if(token=="-fps")
+					fconf >> framerate;
+				else	
+				if(token=="-t")
+					fconf >> timeout;
+				else
+				if(token=="-us")
+					fconf >> usleep_len;
+				else
+				if(token=="-fbuf")
+					fconf >> max_size;
+				else
+				{
+					fprintf(stderr, LC_MSG("Configutation file '%s' ill-formated. Bad token : "), fname, token.c_str() );
+					exit(EXIT_FAILURE);
+				}	
+			}
+			fconf.fclose();
+		}
+		else
+		{
+			fprintf(stderr, LC_MSG("Configutation file '%s' could not be opened."), fname);
+			exit(EXIT_FAILURE);
+		}
+	}
 
 
 
