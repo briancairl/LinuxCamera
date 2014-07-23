@@ -542,7 +542,7 @@ namespace LC
 			while(!fconf.eof())
 			{
 				fconf >> token;
-				if(opened&&token=="-start"	)
+				if(!opened&&token=="-start"	)
 					opened = true;
 				else
 				if(opened&&token=="-end"	)
@@ -588,14 +588,13 @@ namespace LC
 				else
 				{
 					if(opened)
+					{
 						fprintf(stderr, LC_MSG("Configutation file '%s' ill-formated. Bad token : %s"), fname, token.c_str() );
-					else
-						fprintf(stderr, LC_MSG("Configuration from file could not find '-start' tolken"));
-
-					exit(EXIT_FAILURE);
+						exit(EXIT_FAILURE);
+					}
 				}	
 			}
-			fprintf(stderr, LC_MSG("Configuration from file could not find '-end' tolken"));
+			fprintf(stderr, LC_MSG("Configuration from file could not find '-start/-end' pair"));
 			exit(EXIT_FAILURE);
 		}
 		else
