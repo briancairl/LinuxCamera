@@ -8,7 +8,8 @@
 ///			- linux/videodev2.h
 ///			- sys/
 ///			- unistd.h
-///			- OpenCV	[-D WITH_OPENCV]
+///			- boost	
+///			- OpenCV 	[-D WITH_OPENCV]
 ///
 ///	@author Brian Cairl
 /// @date 	July, 2014 [rev:1.0]
@@ -38,17 +39,40 @@
 
 	#include <string>
 
-
-	class LinuxCamera
+	namespace LC
 	{
-	private:
-		std::string 	name;
-		uint8_t	
+
+		typedef enum __LC_PixelFormat__
+		{
+			MPEG = V4L2_PIX_FMT_MJPEG,
+			YUYV = V4L2_PIX_FMT_YUYV ,
+			H264 = V4L2_PIX_FMT_H264
+		} PixelFormat;
 
 
+		class LinuxCamera
+		{
+		#define LC_GET_BIT(reg,n) 		(reg&(1<<n))
+		#define LC_SET_BIT(reg,n) 		reg|= (1<<n)
+		#define LC_CLR_BIT(reg,n) 		reg&=~(1<<n)
+		#define LC_TOG_BIT(reg,n,t)		(t)?(SET_BIT(reg,n)):(CLR_BIT(reg,n))
+		private:
+			std::string 	dev_name;
+			uint16_t		flags;
+			uint16_t 		frame_width;
+			uint16_t		frame_height;
+			uint16_t 		framerate;
+			uint16_t 		timeout;
+			PixelFormat 	pixel_format;
 
-	};
+			void 			_OpenDevice();
+		public:
 
+			LinuxCamera( const char* config_file );
+			LinuxCamera( uint16_t width=640, uint16_t height=480, uint16_t fps=30, PixelFormat format=MPEG, const char* dev_name="/dev/video0" );
+			~LinuxCamera();
+		};
 
+	}
 
 #endif 	
