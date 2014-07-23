@@ -71,7 +71,7 @@
 
 		typedef enum __LC_PixelFormat__
 		{
-			P_MPEG 	= V4L2_PIX_FMT_MJPEG,
+			P_MJPG 	= V4L2_PIX_FMT_MJPEG,
 			P_YUYV 	= V4L2_PIX_FMT_YUYV ,
 			P_H264 	= V4L2_PIX_FMT_H264
 		} PixelFormat;

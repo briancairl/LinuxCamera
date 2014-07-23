@@ -506,6 +506,7 @@ namespace LC
 		frame_width		(640),
 		frame_height	(480),
 		framerate		(30),
+		pixel_format	(P_MJPG),
 		dev_name 		("/dev/video0"),
 		n_buffers 		(0UL),
 		timeout 		(1UL),
@@ -524,6 +525,7 @@ namespace LC
 		frame_width		(640),
 		frame_height	(480),
 		framerate		(30),
+		pixel_format	(P_MJPG),
 		dev_name 		("/dev/video0"),
 		n_buffers 		(0UL),
 		timeout 		(1UL),
@@ -548,6 +550,10 @@ namespace LC
 				if(opened&&token=="-end"	)
 				{
 					fconf.close(); 
+					_OpenDevice();
+					_InitDevice();
+					_InitMMap();
+					_Dispatch();
 					return;
 				}
 				else
@@ -585,6 +591,23 @@ namespace LC
 				{
 					fconf >> max_size;
 				}
+				if(opened&&token=="-fmt"	)
+				{
+					fconf >> token;
+					if(token=="MPEG")
+						pixel_format = P_MJPG;
+					else
+					if(token=="YUYV")
+						pixel_format = P_YUYV;
+					else
+					if(token=="H264")
+						pixel_format = P_H264;
+					else
+					{
+						fprintf(stderr, LC_MSG("Unrecognized pixel format. Use [MPEG | YUYV | "), fname, token.c_str() );
+						exit(EXIT_FAILURE);
+					}
+				}
 				else
 				{
 					if(opened)
@@ -617,6 +640,7 @@ namespace LC
 		frame_width		(width),
 		frame_height	(height),
 		framerate		(fps),
+		pixel_format	(format),
 		dev_name 		(dev_name),
 		n_buffers 		(0UL),
 		timeout 		(1UL),
