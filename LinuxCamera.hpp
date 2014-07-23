@@ -21,22 +21,21 @@
 #ifndef LINUX_CAMERA_HPP
 #define LINUX_CAMERA_HPP
 
-	#ifndef LINUX
-	#error 	Linux only!
+	#ifndef __GNUC__
+	#error 	GNU-Linux only!
 	#endif
 
 	/// C-STD
-	#include <stdio.h>
-	#include <stdlib.h>
-	#include <stdint.h>
-	#include <signal.h>
-	#include <string.h>
-	#include <assert.h>
+	#include <stdio.h>  
+	#include <stdlib.h>  
+	#include <signal.h>  
+	#include <string.h>  
+	#include <assert.h>  
+	#include <getopt.h>
 	#include <fcntl.h>
 	#include <unistd.h>  
 	#include <errno.h>  
-	#include <time.h>  
-	
+		
 
 	/// SYS
 	#include <sys/stat.h>  
@@ -46,15 +45,24 @@
 	#include <sys/ioctl.h> 
 	
 
+	/// LINUX
+	#include <linux/videodev2.h>
+	
+
 	/// CXX-STD
 	#include <string>
 	#include <list>
-	#include 
+	#include <fstream>
 
 
 	/// OpenCV Includes
+	#include "opencv/cv.h"  
 	#include "opencv2/core/core_c.h"  
 	#include "opencv2/highgui/highgui_c.h"   
+
+
+	/// Boost Includes
+	#include <boost/thread.hpp>
 
 
 	namespace LC
@@ -63,21 +71,21 @@
 
 		typedef enum __LC_PixelFormat__
 		{
-			MPEG 	= V4L2_PIX_FMT_MJPEG,
-			YUYV 	= V4L2_PIX_FMT_YUYV ,
-			H264 	= V4L2_PIX_FMT_H264
+			P_MPEG 	= V4L2_PIX_FMT_MJPEG,
+			P_YUYV 	= V4L2_PIX_FMT_YUYV ,
+			P_H264 	= V4L2_PIX_FMT_H264
 		} PixelFormat;
 
 
 
 		typedef enum __LC_Flags__
 		{
- 			DeviceOpen 		= 0UL	,
- 			DeviceInit 				,
- 			MemMapInit 				, 
-			Capturing 				,
-			ThreadActive 			,
-			ReadingFrame		
+ 			F_DeviceOpen 		= 0UL	,
+ 			F_DeviceInit 				,
+ 			F_MemMapInit 				, 
+			F_Capturing 				,
+			F_ThreadActive 				,
+			F_ReadingFrame		
 		} Flags;
 
 
@@ -89,7 +97,7 @@
 		} Buffer;  
 
 
-		typedef std::list<cv::IplImage*> FrameBuf;
+		typedef std::list<IplImage*> FrameBuf;
 
 
 
@@ -108,9 +116,10 @@
 			uint16_t 		framerate;
 			uint16_t 		timeout;
 			uint32_t 		usleep_len;
-		
-			PixelFormat 	pixel_format;
+			
+ 			PixelFormat 	pixel_format;
 			Buffer*			buffers;
+			uint16_t 		n_buffers;
 			FrameBuf		frames;
 			uint16_t 		max_size;
 			uint32_t		capture_count;
@@ -127,7 +136,7 @@
 			void 			_Dispatch();
 			void 			_UnDispatch();
 			
-			void 			_ReadFrame();
+			bool 			_ReadFrame();
 			void 			_GrabFrame();
 			void 			_StoreFrame(const void *p, int size);
 			void 			_RegulateFrameBuffer();
@@ -141,6 +150,8 @@
 			/// @brief 		Constructor from configuration-file.
 			///				Allowed Configuration File Tokens:
 			/// 			===================================
+			///				+ '-start'	marks the beggining of a configuration profile
+			///				+ '-end'	marks the end of a configuration profile
  			/// 			+ '-dev'	device name
 			/// 			+ '-w'		frame width
 			/// 			+ '-h'		frame height
@@ -151,7 +162,7 @@
 			///
 			///	@param 		fname 		config file name (*.conf)
 			LinuxCamera( 
-				const char* fname 
+				const char* 		fname 
 			);
 			
 
@@ -162,11 +173,11 @@
 			///	@param 		ormat 		pixel formate @see LC::PixelFormat 		(default is MPEG)
 			///	@param 		dev_name	device name 							(default is '/dev/video0')
 			LinuxCamera( 	
-				uint16_t 	width 	= 640UL, 
-				uint16_t 	height 	= 480UL, 
-				uint16_t 	fps 	= 30UL, 
-				PixelFormat format 	= PixelFormat::MPEG, 
-				const char* dev_name= "/dev/video0"
+				uint16_t 	width,
+				uint16_t 	height,
+				uint16_t 	fps,
+				PixelFormat format,
+			 	const char*	dev_name
 			);
 			
 

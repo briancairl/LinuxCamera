@@ -1,4 +1,4 @@
-#include <LinuxCamera.hpp>
+#include "LinuxCamera.hpp"
 
 
 #define LC_MSG(str)				("LC_MSG : " str "\n")
@@ -33,10 +33,18 @@ namespace LC
 
 
 
+	static void errno_exit(char *s) 
+	{  
+		fprintf(stderr, "%s error %d, %s\n", s, errno, strerror(errno));  
+		exit(EXIT_FAILURE);  
+	}
+
+
+
 	static void s_capture_loop( LinuxCamera* cam )
 	{
 		///	Bad camera check
-		if( cam==NULL || !cam->is_open() ) )
+		if( cam==NULL || !cam->is_open() )
 		{
 			fprintf(stderr, LC_MSG("Could not start capture thread"));  
 			exit(EXIT_FAILURE);
@@ -46,7 +54,7 @@ namespace LC
 		/// So long as setups were successful, keep this running in the background.
 		for(;;)
 		{
-			if( LC_GET_FLAG(cam->flags, Flags::Capturing) )
+			if( LC_GET_BIT(cam->flags, F_Capturing) )
 			{
 				/// Grab next frame
 				cam->_GrabFrame();
@@ -125,7 +133,7 @@ namespace LC
 				errno_exit("mmap");  
 		} 
 
-		LC_SET_BIT(flags,Flags::MMapInit);
+		LC_SET_BIT(flags,F_MemMapInit);
 	}
 
 
@@ -156,7 +164,7 @@ namespace LC
 			exit(EXIT_FAILURE);
 		}
 
-		LC_SET_BIT(flags,Flags::DeviceOpen);
+		LC_SET_BIT(flags,F_DeviceOpen);
 	}
 
 
@@ -250,7 +258,7 @@ namespace LC
 		frameint.parm.capture.timeperframe.numerator    = 1;  
 		frameint.parm.capture.timeperframe.denominator  = framerate;  
 		if (-1 == xioctl(fd, VIDIOC_S_PARM, &frameint))  
-			fprintf(stderr, LC_MSG("Unable to set frame interval.") ;  
+			fprintf(stderr, LC_MSG("Unable to set frame interval."));  
 
 		/* Buggy driver paranoia. */  
 		min = fmt.fmt.pix.width * 2;  
@@ -263,7 +271,7 @@ namespace LC
 		if (fmt.fmt.pix.sizeimage < min)  
 			fmt.fmt.pix.sizeimage = min;  
 
-		LC_SET_BIT(flags,Flags::DeviceInit);
+		LC_SET_BIT(flags,F_DeviceInit);
 	}  
 
 
@@ -279,7 +287,7 @@ namespace LC
 
 		free(buffers);
 
-		LC_CLR_BIT(flags,Flags::DeviceOpen);
+		LC_CLR_BIT(flags,F_DeviceOpen);
 	}
 
 
@@ -292,11 +300,11 @@ namespace LC
 			proc_thread = new boost::thread( s_capture_loop, this );
 			proc_thread->detach();
 
-			LC_SET_BIT(flags,Flags::ThreadActive);
+			LC_SET_BIT(flags,F_ThreadActive);
 		}
 		else
 		{
-			fprintf(stderr, LC_MSG("Could not dispatch capture thread (_Dispatch attempted)") ;
+			fprintf(stderr, LC_MSG("Could not dispatch capture thread (_Dispatch attempted)"));
 		}
 	}
 
@@ -305,16 +313,16 @@ namespace LC
 
 	void LinuxCamera::_UnDispatch(void)
 	{
-		if(proc_thread && LC_GET_BIT(flags,Flags::ThreadActive) )
+		if(proc_thread && LC_GET_BIT(flags,F_ThreadActive) )
 		{
 			proc_thread->interrupt();
 			delete proc_thread;
 
-			LC_CLR_BIT(flags,Flags::ThreadActive);
+			LC_CLR_BIT(flags,F_ThreadActive);
 		}
 		else
 		{
-			fprintf(stderr, LC_MSG("Capture not running (_UnDispatch attempted) ") ;
+			fprintf(stderr, LC_MSG("Capture not running (_UnDispatch attempted) "));
 		}
 	}
 
@@ -344,7 +352,7 @@ namespace LC
 		if (-1 == xioctl(fd, VIDIOC_STREAMON, &type))  
 			errno_exit("VIDIOC_STREAMON"); 
 		
-		LC_SET_BIT(flags,Flags::Capturing);
+		LC_SET_BIT(flags,F_Capturing);
 	}
 
 
@@ -357,7 +365,7 @@ namespace LC
 		if (-1 == xioctl(fd, VIDIOC_STREAMOFF, &type))
 			errno_exit("VIDIOC_STREAMOFF");  
 		
-		LC_CLR_BIT(flags,Flags::Capturing);
+		LC_CLR_BIT(flags,F_Capturing);
 	}
 
 
@@ -370,7 +378,7 @@ namespace LC
 
 		fd = -1;
 
-		LC_CLR_BIT(flags,Flags::DeviceOpen);
+		LC_CLR_BIT(flags,F_DeviceOpen);
 	}
 
 
@@ -380,10 +388,10 @@ namespace LC
 	void LinuxCamera::_StoreFrame(const void *p, int size)
 	{
 		// Get raw image from buffer
-		CvMat     mat = cvMat(frame_height, frame_width,CV_8UC3,(void*)p);  
+		CvMat mat = cvMat(frame_height, frame_width,CV_8UC3,(void*)p);  
 
 		// Decode the image  
-		frame_buffer.emplace_back(cvDecodeImage(&mat, 1));
+		frames.push_back(cvDecodeImage(&mat, 1));
 
 		// Count the capture
 		++capture_count;
@@ -393,13 +401,13 @@ namespace LC
 
 	bool LinuxCamera::_ScrollFrameBuffer()
 	{
-		if( !frame_buffer.empty() && frame_buffer.front())
+		if( !frames.empty() && frames.front())
 		{
 			/// Release first image
-			cvReleaseImage(&frame_buffer.front());
+			cvReleaseImage(&frames.front());
 
 			/// Pop from buffer
-			frame_buffer.pop_front();
+			frames.pop_front();
 
 			return true;
 		}
@@ -410,14 +418,14 @@ namespace LC
 
 	void LinuxCamera::_RegulateFrameBuffer()
 	{
-		if(!LC_GET_BIT(flag,Flags::ReadingFrame) && frame_buffer.size() > max_size )
+		if(!LC_GET_BIT(flags,F_ReadingFrame) && frames.size() > max_size )
 			_ScrollFrameBuffer();
 	}
 
 
 
 
-	void LinuxCamera::_ReadFrame(void) 
+	bool LinuxCamera::_ReadFrame(void) 
 	{
 		struct v4l2_buffer buf;  
 		unsigned int i;  
@@ -445,7 +453,9 @@ namespace LC
 		if (-1 == xioctl(fd, VIDIOC_QBUF, &buf)) 
 			errno_exit("VIDIOC_QBUF");
 		else
-			return 1;
+			return true;
+
+		return false;
 	} 
 
 
@@ -496,7 +506,8 @@ namespace LC
 		frame_width		(640),
 		frame_height	(480),
 		framerate		(30),
-		dev_name 		(""),
+		dev_name 		("/dev/video0"),
+		n_buffers 		(0UL),
 		timeout 		(1UL),
 		proc_thread		(NULL),
 		flags 			(0UL),
@@ -508,42 +519,84 @@ namespace LC
 
 
 
-	LinuxCamera::LinuxCamera( const char* fname )
+
+	LinuxCamera::LinuxCamera( const char* fname ) :
+		frame_width		(640),
+		frame_height	(480),
+		framerate		(30),
+		dev_name 		("/dev/video0"),
+		n_buffers 		(0UL),
+		timeout 		(1UL),
+		proc_thread		(NULL),
+		flags 			(0UL),
+		fd 				(-1),
+		max_size		(5UL),
+		capture_count	(0UL),
+		usleep_len 		(10000UL)
 	{
 		std::ifstream 	fconf(fname);
 		std::string 	token;
+		bool 			opened = false;;
 		if(fconf.is_open())
 		{
 			while(!fconf.eof())
 			{
 				fconf >> token;
-				if(token=="-dev")
+				if(opened&&token=="-start"	)
+					opened = true;
+				else
+				if(opened&&token=="-end"	)
+				{
+					fconf.close(); 
+					return;
+				}
+				else
+				if(opened&&token=="-dev"	)
+				{
 					fconf >> dev_name;
+				}
 				else
-				if(token=="-w")
+				if(opened&&token=="-w"		)
+				{
 					fconf >> frame_width;
-				else				
-				if(token=="-h")
+				}
+				else					
+				if(opened&&token=="-h"		)
+				{
 					fconf >> frame_height;
+				}
 				else	
-				if(token=="-fps")
+				if(opened&&token=="-fps"	)
+				{
 					fconf >> framerate;
+				}
 				else	
-				if(token=="-t")
+				if(opened&&token=="-t"		)
+				{
 					fconf >> timeout;
+				}
 				else
-				if(token=="-us")
+				if(opened&&token=="-us"		)
+				{
 					fconf >> usleep_len;
+				}
 				else
-				if(token=="-fbuf")
+				if(opened&&token=="-fbuf"	)
+				{
 					fconf >> max_size;
+				}
 				else
 				{
-					fprintf(stderr, LC_MSG("Configutation file '%s' ill-formated. Bad token : "), fname, token.c_str() );
+					if(opened)
+						fprintf(stderr, LC_MSG("Configutation file '%s' ill-formated. Bad token : %s"), fname, token.c_str() );
+					else
+						fprintf(stderr, LC_MSG("Configuration from file could not find '-start' tolken"));
+
 					exit(EXIT_FAILURE);
 				}	
 			}
-			fconf.fclose();
+			fprintf(stderr, LC_MSG("Configuration from file could not find '-end' tolken"));
+			exit(EXIT_FAILURE);
 		}
 		else
 		{
@@ -555,11 +608,18 @@ namespace LC
 
 
 
-	LinuxCamera::LinuxCamera( uint16_t width, uint16_t height, uint16_t fps, const char* dev_name ) :
+	LinuxCamera::LinuxCamera( 				
+		uint16_t 		width,
+		uint16_t 		height,
+		uint16_t 		fps,
+		PixelFormat 	format,
+		const char*		dev_name
+	) :
 		frame_width		(width),
 		frame_height	(height),
 		framerate		(fps),
 		dev_name 		(dev_name),
+		n_buffers 		(0UL),
 		timeout 		(1UL),
 		proc_thread		(NULL),
 		flags 			(0UL),
@@ -580,10 +640,10 @@ namespace LC
 	{
 		_UnDispatch();
 
-		if( LC_CLR_BIT(flags,Flags::DeviceInit) )
+		if( LC_CLR_BIT(flags,F_DeviceInit) )
 			_UnInitDevice();
 
-		if( LC_GET_BIT(flags,Flags::DeviceOpen) )
+		if( LC_GET_BIT(flags,F_DeviceOpen) )
 			_CloseDevice();
 	}
 
@@ -592,11 +652,11 @@ namespace LC
 	bool 	LinuxCamera::good()				
 	{ 
 		return 	LC_REG_CMP(flags, 
-				LC_MASK(Flags::DeviceOpen) 		| 
-				LC_MASK(Flags::DeviceInit) 		|
-				LC_MASK(Flags::MMapInit)		|
-				LC_MASK(Flags::ThreadActive)	|
-				LC_MASK(Flags::Capturing)
+				LC_MASK(F_DeviceOpen) 		| 
+				LC_MASK(F_DeviceInit) 		|
+				LC_MASK(F_MemMapInit)		|
+				LC_MASK(F_ThreadActive)		|
+				LC_MASK(F_Capturing)
 		);
 	}
 
@@ -605,10 +665,10 @@ namespace LC
 	bool 	LinuxCamera::is_open()			
 	{ 
 		return 	LC_REG_CMP(flags, 
-				LC_MASK(Flags::DeviceOpen) 		| 
-				LC_MASK(Flags::DeviceInit) 		|
-				LC_MASK(Flags::MMapInit)		|
-				LC_MASK(Flags::ThreadActive)
+				LC_MASK(F_DeviceOpen) 		| 
+				LC_MASK(F_DeviceInit) 		|
+				LC_MASK(F_MemMapInit)		|
+				LC_MASK(F_ThreadActive)
 		);
 	}
 
@@ -616,7 +676,7 @@ namespace LC
 
 	bool 	LinuxCamera::is_capturing()		
 	{ 
-		return 	LC_GET_BIT(flags, Flags::Capturing); 
+		return 	LC_GET_BIT(flags, F_Capturing); 
 	}
 	
 
@@ -670,27 +730,29 @@ namespace LC
 
 	bool 	LinuxCamera::operator++(void)
 	{
-		return _ScrollFrameBuffer()
+		LC_CLR_BIT(flags,F_ReadingFrame);
+		return _ScrollFrameBuffer();
 	}
 
 
 
 	IplImage*	LinuxCamera::get_frame()
 	{
-		if(frame_buffer.empty())
+		LC_SET_BIT(flags,F_ReadingFrame);
+		if(frames.empty())
 			return NULL;
 		else
-			return frame_buffer.front();
+			return frames.front();
 	}
 
 
 
 	bool 		LinuxCamera::save_frame(const char* fname)
 	{
-		if(frame_buffer.empty())
+		if(frames.empty())
 			false;
 		else
-			return 	cvSaveImage(fname,frame_buffer.front(),NULL);
+			return 	cvSaveImage(fname,frames.front(),NULL);
 	}
 
 
