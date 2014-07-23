@@ -61,10 +61,13 @@ namespace LC
 
 				/// Maintain the frame-buffer (auto-release)
 				cam->_RegulateFrameBuffer();
+
+				/// Wait Until Next Frame Is Ready
+ 				usleep(cam->usleep_len_fps);
 			}
 			else
 			{
-				usleep(cam->usleep_len);
+				usleep(cam->usleep_len_idle);
 			}
 		}
 	}
@@ -178,6 +181,9 @@ namespace LC
 		struct v4l2_format 		fmt;
 		struct v4l2_streamparm 	frameint;
 		uint16_t 				min;
+
+		/* Caculated Frame Wait */
+		usleep_len_fps = (1000000/framerate);
 
 		/* Timeout. */
 		tv.tv_sec 	= timeout;  
@@ -515,8 +521,9 @@ namespace LC
 		fd 				(-1),
 		max_size		(5UL),
 		capture_count	(0UL),
-		usleep_len 		(10000UL)
-	{}
+		usleep_len_idle (10000UL)
+	{
+	}
 
 
 
@@ -534,22 +541,28 @@ namespace LC
 		fd 				(-1),
 		max_size		(5UL),
 		capture_count	(0UL),
-		usleep_len 		(10000UL)
+		usleep_len_idle 		(10000UL)
 	{
 		std::ifstream 	fconf(fname);
 		std::string 	token;
-		bool 			opened = false;;
+		bool 			opened = false;
+
 		if(fconf.is_open())
 		{
 			while(!fconf.eof())
 			{
 				fconf >> token;
 				if(!opened&&token=="-start"	)
+				{
 					opened = true;
+				}
 				else
 				if(opened&&token=="-end"	)
 				{
+					/// Close Config
 					fconf.close(); 
+
+					/// Init Camera
 					_OpenDevice();
 					_InitDevice();
 					_InitMMap();
@@ -584,27 +597,34 @@ namespace LC
 				else
 				if(opened&&token=="-us"		)
 				{
-					fconf >> usleep_len;
+					fconf >> usleep_len_idle;
 				}
 				else
 				if(opened&&token=="-fbuf"	)
 				{
 					fconf >> max_size;
 				}
+				else
 				if(opened&&token=="-fmt"	)
 				{
 					fconf >> token;
-					if(token=="MPEG")
+					if(token=="MJPG")
+					{
 						pixel_format = P_MJPG;
+					}
 					else
 					if(token=="YUYV")
+					{
 						pixel_format = P_YUYV;
+					}
 					else
 					if(token=="H264")
+					{
 						pixel_format = P_H264;
+					}
 					else
 					{
-						fprintf(stderr, LC_MSG("Unrecognized pixel format. Use [MPEG | YUYV | "), fname, token.c_str() );
+						fprintf(stderr, LC_MSG("Unrecognized pixel format. Supported : [MJPG | YUYV | H264]"), fname, token.c_str() );
 						exit(EXIT_FAILURE);
 					}
 				}
@@ -612,7 +632,7 @@ namespace LC
 				{
 					if(opened)
 					{
-						fprintf(stderr, LC_MSG("Configutation file '%s' ill-formated. Bad token : %s"), fname, token.c_str() );
+						fprintf(stderr, LC_MSG("Configuration file '%s' ill-formated. Bad token : %s"), fname, token.c_str() );
 						exit(EXIT_FAILURE);
 					}
 				}	
@@ -622,7 +642,7 @@ namespace LC
 		}
 		else
 		{
-			fprintf(stderr, LC_MSG("Configutation file '%s' could not be opened."), fname);
+			fprintf(stderr, LC_MSG("Configuration file '%s' could not be opened."), fname);
 			exit(EXIT_FAILURE);
 		}
 	}
@@ -649,7 +669,7 @@ namespace LC
 		fd 				(-1),
 		max_size		(5UL),
 		capture_count	(0UL),
-		usleep_len 		(10000UL)
+		usleep_len_idle 		(10000UL)
 	{
 		_OpenDevice();
 		_InitDevice();
@@ -739,7 +759,7 @@ namespace LC
 			exit(EXIT_FAILURE);  
 		}
 		else 
-			usleep_len = _n; 
+			usleep_len_idle = _n; 
 	}
 
 

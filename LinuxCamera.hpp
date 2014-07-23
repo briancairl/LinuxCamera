@@ -115,8 +115,9 @@
 			uint16_t		frame_height;
 			uint16_t 		framerate;
 			uint16_t 		timeout;
-			uint32_t 		usleep_len;
-			
+			uint32_t 		usleep_len_idle;
+			uint32_t 		usleep_len_fps;
+
  			PixelFormat 	pixel_format;
 			Buffer*			buffers;
 			uint16_t 		n_buffers;
