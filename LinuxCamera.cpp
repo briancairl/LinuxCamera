@@ -78,6 +78,8 @@ namespace LC
 		os << "Capturing             : " << BITSTAT(F_Capturing )			<< std::endl;
 		os << "Thread Running        : " << BITSTAT(F_ThreadActive)			<< std::endl;
 		os << "Reading Frame         : " << BITSTAT(F_ReadingFrame)			<< std::endl;
+		os << "Writing Frame         : " << BITSTAT(F_WritingFrame)			<< std::endl;
+		os << "Buffer Overflowed     : " << BITSTAT(F_FrameBufOverflow)		<< std::endl;
 		os << "AutoSave Enabled      : " << BITSTAT(F_ContinuousSaveMode)	<< std::endl;
 		os << "Adaptive-FPS Enabled  : " << BITSTAT(F_AdaptiveFPS)			<< std::endl;
 		os << "Backoff Enabled       : " << BITSTAT(F_AdaptiveFPSBackoff)	<< std::endl;
@@ -201,9 +203,6 @@ namespace LC
 			{
 				/// Grab next frame
 				cam->_GrabFrame();
-
-				/// Maintain the frame-buffer (auto-release)
-				cam->_RegulateFrameBuffer();
 
 				/// Autosave frames
 				cam->_AutoSave();
@@ -381,8 +380,8 @@ namespace LC
 
 		if (0 == xioctl(fd, VIDIOC_CROPCAP, &cropcap)) 
 		{
-			crop.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-			crop.c = cropcap.defrect; /* reset to default */
+			crop.type 	= V4L2_BUF_TYPE_VIDEO_CAPTURE;
+			crop.c 		= cropcap.defrect; /* reset to default */
 
 			if (-1 == xioctl(fd, VIDIOC_S_CROP, &crop)) 
 			{
@@ -552,26 +551,50 @@ namespace LC
 		// Get raw image from buffer
 		CvMat mat = cvMat(frame_height, frame_width,CV_8UC3,(void*)p);  
 
-		// Decode the image and add it to the frame-buffer
-		LC_SET_BIT(flags,F_WritingFrame);
-		frames.push_back(cvDecodeImage(&mat, 1));
-		LC_CLR_BIT(flags,F_WritingFrame);
+		// Wait until pending read is finished
+		while(LC_GET_BIT(flags,F_ReadingFrame));
 
-		// Count the capture
-		++capture_count;
+		// Check if Buffer is full
+		if(frames_avail == LC_FRAMEBUFFER_LEN)
+		{
+			LC_SET_BIT(flags,F_FrameBufOverflow);
+			_ScrollFrameBuffer();
+		}
+		else
+		{
+			LC_CLR_BIT(flags,F_FrameBufOverflow);
+		}
+
+		if( frames[frame_wr_itr] == NULL )
+		{
+			// Decode the image and add it to the frame-buffer
+			LC_SET_BIT(flags,F_WritingFrame);
+
+			frames[frame_wr_itr] = cvDecodeImage(&mat, 1);
+			
+			++frame_wr_itr %= LC_FRAMEBUFFER_LEN;
+			++frames_avail;
+			
+			LC_CLR_BIT(flags,F_WritingFrame);
+
+			// Count the capture
+			++capture_count;
+		}
 	}
 	
 
 
 	bool LinuxCamera::_ScrollFrameBuffer()
 	{
-		if( !frames.empty() && frames.front())
+		if( frames_avail )
 		{
 			/// Release first image
-			cvReleaseImage(&frames.front());
+			cvReleaseImage(&frames[frame_rd_itr]);
 
-			/// Pop from buffer
-			frames.pop_front();
+			frames[frame_rd_itr] = NULL;
+
+			++frame_rd_itr %= LC_FRAMEBUFFER_LEN;
+			--frames_avail;
 
 			return true;
 		}
@@ -580,10 +603,10 @@ namespace LC
 
 
 
-	void LinuxCamera::_RegulateFrameBuffer()
+	void LinuxCamera::_ClearFrameBuffer()
 	{
-		while(!LC_GET_BIT(flags,F_ReadingFrame) && frames.size() > max_frames )
-			_ScrollFrameBuffer();
+		for( size_t idx = 0; idx < LC_FRAMEBUFFER_LEN; idx++ )
+			frames[idx] = NULL;
 	}
 
 
@@ -751,11 +774,14 @@ namespace LC
 		proc_thread		(NULL),
 		flags 			(0UL),
 		fd 				(-1),
-		max_frames		(5UL),
 		capture_count	(0UL),
 		usleep_len_idle (10000UL),
-		fps_profile		(0.0f)
+		fps_profile		(0.0f),
+		frame_rd_itr	(0UL),
+		frame_wr_itr	(0UL),
+		frames_avail 	(0UL)
 	{
+		_ClearFrameBuffer();
 	}
 
 
@@ -772,11 +798,14 @@ namespace LC
 		proc_thread		(NULL),
 		flags 			(0UL),
 		fd 				(-1),
-		max_frames		(5UL),
 		capture_count	(0UL),
 		usleep_len_idle (10000UL),
-		fps_profile		(0.0f)
+		fps_profile		(0.0f),
+		frame_rd_itr	(0UL),
+		frame_wr_itr	(0UL),
+		frames_avail 	(0UL)
 	{
+		_ClearFrameBuffer();
 		std::ifstream 	fconf(fname);
 		std::string 	token;
 		bool 			opened = false;
@@ -837,11 +866,6 @@ namespace LC
 				if(opened&&token=="-us"		)
 				{
 					fconf >> usleep_len_idle;
-				}
-				else
-				if(opened&&token=="-fbuf"	)
-				{
-					fconf >> max_frames;
 				}
 				else
 				if(opened&&token=="-fmt"	)
@@ -916,11 +940,14 @@ namespace LC
 		proc_thread		(NULL),
 		flags 			(0UL),
 		fd 				(-1),
-		max_frames		(5UL),
 		capture_count	(0UL),
 		usleep_len_idle (10000UL),
-		fps_profile		(0.0f)
+		fps_profile		(0.0f),
+		frame_rd_itr	(0UL),
+		frame_wr_itr	(0UL),
+		frames_avail 	(0UL)
 	{
+		_ClearFrameBuffer();
 		_OpenDevice();
 		_InitDevice();
 		_InitMMap();
@@ -944,7 +971,7 @@ namespace LC
 
 	uint16_t 	LinuxCamera::size()				
 	{ 
-		return 	frames.size();
+		return 	frames_avail;
 	}
 
 
@@ -993,18 +1020,6 @@ namespace LC
 		_StopCapture(); 	
 	}
 
-
-
-	void 	LinuxCamera::set_maxframes( uint16_t _n ) 	
-	{ 	
-		if(_n == 0) 
-		{
-			fprintf(stderr,LC_MSG("Frame buffer max-size must be NON-ZERO."));  
-			exit(EXIT_FAILURE);  
-		}
-		else 
-			max_frames = _n; 
-	}
 
 
 
@@ -1064,11 +1079,13 @@ namespace LC
 
 	IplImage*	LinuxCamera::get_frame()
 	{
+		while(LC_GET_BIT(flags,F_WritingFrame));
+
 		LC_SET_BIT(flags,F_ReadingFrame);
-		if(frames.empty())
+		if(frames_avail)
 			return NULL;
 		else
-			return frames.front();
+			return frames[frame_rd_itr];
 	}
 
 
@@ -1112,16 +1129,14 @@ namespace LC
 	{
 		while(LC_GET_BIT(flags,F_WritingFrame));
 
-		if(!frames.empty())
+		if(frames_avail)
 		{
 			LC_SET_BIT(flags,F_ReadingFrame);
 
 			///Convert to cv::Mat
 			mat_out = cv::cvarrToMat(frames.front());
 
-			cvReleaseImage(&frames.front());
-		
-			frames.pop_front();
+			_ScrollFrameBuffer();
 
 			LC_CLR_BIT(flags,F_ReadingFrame);
 			
@@ -1150,16 +1165,14 @@ namespace LC
 	{
 		while(LC_GET_BIT(flags,F_WritingFrame));
 
-		if(!frames.empty())
+		if(frames_avail)
 		{
 			LC_SET_BIT(flags,F_ReadingFrame);
 
 			/// Perform mean-blob algorithm internal to ColorBlob_res
 			blob_out.perform(frames.front(),color_blob_spec);
 
-			cvReleaseImage(&frames.front());
-
-			frames.pop_front();
+			_ScrollFrameBuffer();
 			
 			LC_CLR_BIT(flags,F_ReadingFrame);
 			

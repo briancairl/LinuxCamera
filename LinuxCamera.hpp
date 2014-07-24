@@ -31,7 +31,13 @@
 	#define LC_WITH_COLORBLOB_SUPPORT  	1
 	#endif 
 
+
+	/// Default Frame-buffer len
+	#ifndef LC_FRAMEBUFFER_LEN
+	#define LC_FRAMEBUFFER_LEN 			5
+	#endif
 	
+
 	/// C-STD
 	#include <stdio.h>  
 	#include <stdlib.h>  
@@ -58,7 +64,7 @@
 
 	/// CXX-STD
 	#include <string>
-	#include <list>
+	#include <array>
 	#include <fstream>
 	#include <iostream>
 
@@ -98,6 +104,7 @@
 			F_ThreadActive 				,
 			F_ReadingFrame				,
 			F_WritingFrame				,
+			F_FrameBufOverflow			,
 			F_ContinuousSaveMode		,
 			F_AdaptiveFPS				,
 			F_AdaptiveFPSBackoff
@@ -112,7 +119,7 @@
 		} Buffer;  
 
 
-		typedef std::list<IplImage*> FrameBuf;
+		typedef std::array<IplImage*,LC_FRAMEBUFFER_LEN> FrameBuf;
 
 
 
@@ -130,7 +137,8 @@
 			TimeStamp( const float time_s );
 			TimeStamp( const uint16_t hrs, const uint16_t min, const uint16_t sec, const uint16_t millis );
 
-			~TimeStamp() {}
+			~TimeStamp() 
+			{}
 		};
 
 
@@ -217,13 +225,16 @@
 
  			PixelFormat 	pixel_format;
 			Buffer*			buffers;
+
 			FrameBuf		frames;
+			uint16_t		frame_rd_itr;
+			uint16_t		frame_wr_itr;
+			uint16_t		frames_avail;
 
 			uint32_t 		usleep_len_idle;
 			uint32_t 		usleep_len_read;
 
 			uint16_t 		n_buffers;
-			uint16_t 		max_frames;
 			uint32_t		capture_count;
 
 			boost::thread* 	proc_thread;
@@ -247,7 +258,7 @@
 			bool 			_ReadFrame();
 			void 			_GrabFrame();
 			void 			_StoreFrame(const void *p, int size);
-			void 			_RegulateFrameBuffer();
+			void 			_ClearFrameBuffer();
 			bool 			_ScrollFrameBuffer();
 
 			void 			_ResetFPSProfile();
@@ -278,7 +289,6 @@
 			///				+ '-dir'		auto-save directory specifier
 			/// 			+ '-autofps'	allows sleep-cycling to adjust to match camera fps
 			/// 			+ '-autosave'	automatically saves each new frame to specified save directory
-			/// 			+ '-fbuf'	max frame buffer size (non-zero)
 			///
 			///	@param 		fname 		config file name (*.conf)
 			LinuxCamera( 
@@ -350,9 +360,6 @@
 
 			///	@brief 		Sets the micro-sleep length (in micro-seconds) between camera reads
 			void 			set_usleep_read( uint32_t usec );
-
-			/// @brief 		Sets the max length of the frame-capture buffer
-			void 			set_maxframes( uint16_t _n );
 
 			/// @brief 		Sets the auto-save directory
 			void 			set_autosavedir( const char* _dir );
