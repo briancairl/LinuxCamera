@@ -89,7 +89,8 @@
 			F_ThreadActive 				,
 			F_ReadingFrame				,
 			F_ContinuousSaveMode		,
-			F_AdaptiveFPS			
+			F_AdaptiveFPS				,
+			F_AdaptiveFPSBackoff
 		} Flags;
 
 
@@ -156,6 +157,7 @@
 			void 			_ResetFPSProfile();
 			void 			_UpdateFPSProfile();
 			void 			_UpdateAdaptiveSleep();
+			void 			_BackoffAdaptiveSleep();
 		public:
 
 			/// @brief 		Default

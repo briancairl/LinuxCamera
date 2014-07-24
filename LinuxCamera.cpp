@@ -9,7 +9,7 @@
 #define LC_SET_BIT(reg,n) 		reg |=  (1<<n)
 #define LC_CLR_BIT(reg,n) 		reg &= ~(1<<n)
 #define LC_TOG_BIT(reg,n,t)		(t)?(SET_BIT(reg,n)):(CLR_BIT(reg,n))
-#define LC_FPS_ADAPTINC			10UL
+#define LC_FPS_ADAPTINC			20UL
 
 namespace LC
 {
@@ -54,6 +54,7 @@ namespace LC
 		os << "Reading Frame         : " << BITSTAT(F_ReadingFrame)			<< std::endl;
 		os << "AutoSave Enabled      : " << BITSTAT(F_ContinuousSaveMode)	<< std::endl;
 		os << "Adaptive-FPS Enabled  : " << BITSTAT(F_AdaptiveFPS)			<< std::endl;
+		os << "Backoff Enabled       : " << BITSTAT(F_AdaptiveFPSBackoff)	<< std::endl;
 		os << "=========================================================" 	<< std::endl;
 		return os;
 
@@ -549,6 +550,7 @@ namespace LC
 			{
 				if(_ReadFrame())
 				{
+					LC_CLR_BIT(flags,F_AdaptiveFPSBackoff);
 					return;
 				}
 				else
@@ -557,7 +559,12 @@ namespace LC
 				}
 			}
 		}
-		fprintf(stderr, LC_MSG("Could not read frame from %s"), dev_name.c_str() );
+
+		/// Program is running faster than camera can give it frames!
+		_BackoffAdaptiveSleep();
+
+		// Backoff Sucka!
+		LC_SET_BIT(flags,F_AdaptiveFPSBackoff);
 	} 
 
 
@@ -618,6 +625,11 @@ namespace LC
 		}
 	}
 
+
+	void LinuxCamera::_BackoffAdaptiveSleep()
+	{
+		usleep_len_read+=(2*LC_FPS_ADAPTINC);
+	}
 
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////
