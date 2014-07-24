@@ -424,7 +424,7 @@ namespace LC
 
 	void LinuxCamera::_RegulateFrameBuffer()
 	{
-		if(!LC_GET_BIT(flags,F_ReadingFrame) && frames.size() > max_size )
+		while(!LC_GET_BIT(flags,F_ReadingFrame) && frames.size() > max_size )
 			_ScrollFrameBuffer();
 	}
 
@@ -755,7 +755,7 @@ namespace LC
 	{
 		if(_n == 0) 
 		{
-			fprintf(stderr,LC_MSG("USleep len must be NON-ZERO."));  
+			fprintf(stderr,LC_MSG("Idle-sleep len must be NON-ZERO."));  
 			exit(EXIT_FAILURE);  
 		}
 		else 
