@@ -112,9 +112,10 @@
 		public:
 			uint16_t 	hours;
 			uint16_t 	mins;
-			uint16_t 	sec;
+			uint16_t 	secs;
 			uint16_t 	millis;
 
+			TimeStamp();
 			TimeStamp( const float time_s );
 			TimeStamp( const uint16_t hrs, const uint16_t min, const uint16_t sec, const uint16_t millis );
 
@@ -152,7 +153,7 @@
 
 			boost::thread* 	proc_thread;
 
-			TimeStamp 		stamp;
+			TimeStamp 		timestamp;
 			float 			fps_profile;
 			uint32_t 		fps_profile_framecount;
 			struct timespec fps_profile_pts[2UL];

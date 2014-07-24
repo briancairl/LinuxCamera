@@ -12,7 +12,7 @@
 #define LC_FPS_ADAPTINC						20UL
 
 #define LC_IMG_TS_FMTSTR 					"%s/%_s_%d_%d_%d_%d_%d.%s"			
-#defime LC_IMG_TS_FMTLIST(dir,name,n,ts,ext) dir , name, n , ts.hours, ts.min , ts.sec , ts.millis , ext
+#define LC_IMG_TS_FMTLIST(dir,name,n,ts,ext) dir,name,n,ts.hours,ts.mins,ts.secs,ts.millis,ext
 
 namespace LC
 {
@@ -81,22 +81,33 @@ namespace LC
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
+	TimeStamp::TimeStamp() :
+		hours  	(0UL),
+		mins 	(0UL),
+		secs 	(0UL),
+		millis 	(0UL)
+	{
+	}
+
 
 	TimeStamp::TimeStamp( const float time_s )
 	{
-		uint32_t time32 = time_s*1000UL;
+		uint32_t time32 = (time_s*1000UL);
+
 		hours 	= time32%3600000UL; 	time32-= 3600000UL	*hours;
 		mins 	= time32%60000UL; 		time32-= 60000UL	*mins;
 		secs 	= time32%1000UL; 		time32-= 1000UL 	*secs;
-		secs 	= time32%1000UL; 		time32-= 1000UL 	*secs;
+		millis 	= time32;
 	}
 
 
 
-	TimeStamp( const uint16_t hrs, const uint16_t min, const uint16_t sec, const uint16_t millis )
+	TimeStamp::TimeStamp( const uint16_t hrs, const uint16_t min, const uint16_t sec, const uint16_t millis ) :
+		hours  	(hrs),
+		mins 	(min),
+		secs 	(sec),
+		millis 	(millis)
 	{
-
-
 	}
 
 
@@ -1048,9 +1059,9 @@ namespace LC
 		{
 			LC_SET_BIT(flags,F_ReadingFrame);
 
-			mat_out = cvarrToMat(frames.front());
+			mat_out = cv::cvarrToMat(frames.front());
 
-			cvReleaseImage(frames.front());
+			cvReleaseImage(&frames.front());
 			
 			frames.pop_front();
 
@@ -1063,7 +1074,7 @@ namespace LC
 
 
 
-	void 	LinuxCamera::operator<<( const TimeStamp& ts );
+	void 	LinuxCamera::operator<<( const TimeStamp& ts )
 	{
 		timestamp = ts;
 	}
