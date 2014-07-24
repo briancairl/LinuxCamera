@@ -94,9 +94,9 @@ namespace LC
 	{
 		uint32_t time32 = (time_s*1000UL);
 
-		hours 	= time32%3600000UL; 	time32-= 3600000UL	*hours;
-		mins 	= time32%60000UL; 		time32-= 60000UL	*mins;
-		secs 	= time32%1000UL; 		time32-= 1000UL 	*secs;
+		hours 	= time32/3600000UL; 	time32-= 3600000UL*hours;
+		mins 	= time32/60000UL; 		time32-= 60000UL  *mins;
+		secs 	= time32/1000UL; 		time32-= 1000UL   *secs;
 		millis 	= time32;
 	}
 

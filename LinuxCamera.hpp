@@ -124,6 +124,18 @@
 
 
 
+
+		class ColorBlob_Result
+		{
+		public:
+			cv::Point2f pt;
+
+
+		};
+
+
+
+
 		class LinuxCamera
 		{		
 		friend void 			s_capture_loop( LinuxCamera* cam );
