@@ -23,12 +23,12 @@ namespace LC
 	{
 		#define BITSTAT(_n) 	(LC_GET_BIT(cam.flags,_n) ? "YES" : "NO")
 
-		os << "===================================================" 	<< std::endl;
-		os 																<< std::endl;
-		os << ":[Configurations]" 										<< std::endl;
-		os << "----------------------------------------------------" 	<< std::endl;
-		os << "Device Name        : " << cam.dev_name 					<< std::endl;
-		os << "Autosave Directory : " << cam.dir_name 					<< std::endl;
+		os << "=========================================================" 	<< std::endl;
+		os 																	<< std::endl;
+		os << ":[Configurations]" 											<< std::endl;
+		os << "----------------------------------------------------" 		<< std::endl;
+		os << "Device Name        : " << cam.dev_name 						<< std::endl;
+		os << "Autosave Directory : " << cam.dir_name 						<< std::endl;
 		os << "Pixel Format       : ";
 		switch(cam.pixel_format)
 		{
@@ -37,21 +37,24 @@ namespace LC
 			case P_H264: os << "H264"; break;
 		}
 		os << std::endl;
-		os << "Frame Width        : " << cam.frame_width 				<< std::endl;
-		os << "Frame Height       : " << cam.frame_height				<< std::endl;
-		os << "Framerate          : " << cam.framerate				    << std::endl;
-		os << "Framerate (Actual) : " << cam.fps_profile				<< std::endl;
-		os 																<< std::endl;
-		os << ":[Flags]" 												<< std::endl;
-		os << "----------------------------------------------------" 	<< std::endl;
-		os << "Device Open        : " << BITSTAT(F_DeviceOpen)			<< std::endl;
-		os << "Device Init        : " << BITSTAT(F_DeviceInit)			<< std::endl;
-		os << "Memory-Map Init    : " << BITSTAT(F_MemMapInit)			<< std::endl;
-		os << "Capturing          : " << BITSTAT(F_Capturing )			<< std::endl;
-		os << "Thread Running     : " << BITSTAT(F_ThreadActive)		<< std::endl;
-		os << "Reading Frame      : " << BITSTAT(F_ReadingFrame)		<< std::endl;
-		os << "AutoSave Enabled   : " << BITSTAT(F_ContinuousSaveMode)	<< std::endl;
-		os << "===================================================" 	<< std::endl;
+		os << "Frame Width           : " << cam.frame_width 				<< std::endl;
+		os << "Frame Height          : " << cam.frame_height				<< std::endl;
+		os << "Framerate             : " << cam.framerate		<< " fps"	<< std::endl;
+		os << "Framerate  (Actual)   : " << cam.fps_profile		<< " fps"	<< std::endl;
+		os << "Sleep-time (Read)     : " << cam.usleep_len_read	<< " us"	<< std::endl;
+		os << "Sleep-time (Idle)     : " << cam.usleep_len_idle	<< " us"	<< std::endl;
+		os 																	<< std::endl;
+		os << ":[Flags]" 													<< std::endl;
+		os << "----------------------------------------------------" 		<< std::endl;
+		os << "Device Open           : " << BITSTAT(F_DeviceOpen)			<< std::endl;
+		os << "Device Init           : " << BITSTAT(F_DeviceInit)			<< std::endl;
+		os << "Memory-Map Init       : " << BITSTAT(F_MemMapInit)			<< std::endl;
+		os << "Capturing             : " << BITSTAT(F_Capturing )			<< std::endl;
+		os << "Thread Running        : " << BITSTAT(F_ThreadActive)			<< std::endl;
+		os << "Reading Frame         : " << BITSTAT(F_ReadingFrame)			<< std::endl;
+		os << "AutoSave Enabled      : " << BITSTAT(F_ContinuousSaveMode)	<< std::endl;
+		os << "Adaptive-FPS Enabled  : " << BITSTAT(F_AdaptiveFPS)			<< std::endl;
+		os << "=========================================================" 	<< std::endl;
 		return os;
 
 		#undef BITSTAT
@@ -94,15 +97,14 @@ namespace LC
 			exit(EXIT_FAILURE);
 		}
 
+		/// Profiling Clock-Start
+		cam->_ResetFPSProfile();
 
 		/// So long as setups were successful, keep this running in the background.
 		for(;;)
 		{
 			if( LC_GET_BIT(cam->flags, F_Capturing) )
 			{
-				/// Profiling Clock-Start
-				clock_gettime(CLOCK_MONOTONIC,cam->fps_profile_pts+0UL);
-
 				/// Grab next frame
 				cam->_GrabFrame();
 
@@ -113,20 +115,20 @@ namespace LC
 				cam->_AutoSave();
 
 				/// Wait Until Next Frame Is Ready
- 				usleep(cam->usleep_len_fps);
+ 				usleep(cam->usleep_len_read);
 
- 				/// Profiling Clock-End
- 				clock_gettime(CLOCK_MONOTONIC,cam->fps_profile_pts+1UL);
+ 				/// Updated Calculated FPS
+ 				cam->_UpdateFPSProfile();
 
- 				/// Update FPS Profile
- 				float t_diff = (cam->fps_profile_pts[1].tv_sec - cam->fps_profile_pts[0UL].tv_sec);
- 				if( t_diff > 0.0f )
- 				{
- 					cam->fps_profile += (0.1f)*( (1.0f/t_diff) - cam->fps_profile );
- 				}
+ 				/// Update Adaptive Sleep (Try Match Camera FPS)
+ 				cam->_UpdateAdaptiveSleep();
 			}
 			else
 			{
+				/// Profiling Clock-Reset
+				cam->_ResetFPSProfile();
+
+				/// Sleep...
 				usleep(cam->usleep_len_idle);
 			}
 		}
@@ -243,7 +245,7 @@ namespace LC
 		uint16_t 				min;
 
 		/* Caculated Frame Wait */
-		usleep_len_fps = (1000000/framerate);
+		usleep_len_read = (1000000/framerate);
 
 		/* Timeout. */
 		tv.tv_sec 	= timeout;  
@@ -578,6 +580,46 @@ namespace LC
 
 
 
+	void LinuxCamera::_ResetFPSProfile()
+	{
+		/// Reset Epoch
+		clock_gettime(CLOCK_MONOTONIC,fps_profile_pts+0UL);
+		
+		/// Reset Profile Frame Counter
+		fps_profile_framecount = 0UL;
+	}
+
+
+
+	void LinuxCamera::_UpdateFPSProfile()
+	{
+		/// Profiling Clock-End
+		clock_gettime(CLOCK_MONOTONIC,fps_profile_pts+1UL);
+
+		/// Update FPS Profile
+		float t_diff = (fps_profile_pts[1].tv_sec - fps_profile_pts[0UL].tv_sec);
+		if( t_diff > 0.0f )
+			fps_profile = (float)fps_profile_framecount/t_diff;
+	}
+
+
+	void LinuxCamera::_UpdateAdaptiveSleep()
+	{
+		if( LC_GET_BIT(flags,F_AdaptiveFPS) && (usleep_len_read > 0) )
+		{
+			if( (uint32_t)fps_profile > framerate  )
+				++usleep_len_read;
+			else
+				--usleep_len_read;
+		}
+		else
+		{
+			usleep_len_read = 0UL;
+		}
+	}
+
+
+
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	/// USER-LEVEL
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -716,6 +758,10 @@ namespace LC
 				if(opened&&token=="-autosave")
 				{
 					LC_SET_BIT(flags,F_ContinuousSaveMode);
+				}
+				if(opened&&token=="-autofps")
+				{
+					LC_SET_BIT(flags,F_AdaptiveFPS);
 				}
 				else
 				{
@@ -896,5 +942,18 @@ namespace LC
 			return 	cvSaveImage(fname,frames.front(),NULL);
 	}
 
+
+
+	void 	LinuxCamera::enable_adaptive_fps()
+	{
+		LC_SET_BIT(flags,F_AdaptiveFPS);
+	}
+
+
+
+	void 	LinuxCamera::disable_adaptive_fps()
+	{
+		LC_CLR_BIT(flags,F_AdaptiveFPS);
+	}
 
 }

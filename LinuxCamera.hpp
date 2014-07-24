@@ -88,7 +88,8 @@
 			F_Capturing 				,
 			F_ThreadActive 				,
 			F_ReadingFrame				,
-			F_ContinuousSaveMode		
+			F_ContinuousSaveMode		,
+			F_AdaptiveFPS			
 		} Flags;
 
 
@@ -121,7 +122,7 @@
 			uint16_t 		framerate;
 			uint16_t 		timeout;
 			uint32_t 		usleep_len_idle;
-			uint32_t 		usleep_len_fps;
+			uint32_t 		usleep_len_read;
  			PixelFormat 	pixel_format;
 			Buffer*			buffers;
 			FrameBuf		frames;
@@ -132,6 +133,7 @@
 			boost::thread* 	proc_thread;
 
 			float 			fps_profile;
+			uint32_t 		fps_profile_framecount;
 			struct timespec fps_profile_pts[2UL];
 
 			void 			_InitMMap(void);
@@ -150,6 +152,10 @@
 			void 			_StoreFrame(const void *p, int size);
 			void 			_RegulateFrameBuffer();
 			bool 			_ScrollFrameBuffer();
+
+			void 			_ResetFPSProfile();
+			void 			_UpdateFPSProfile();
+			void 			_UpdateAdaptiveSleep();
 		public:
 
 			/// @brief 		Default
@@ -222,6 +228,13 @@
 			/////////////////////////////////////////////////////////////////////////////////////////////////////////////
 			/// Interfaces
 			/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+			///	@brief 		Enables adaptive FPS (adapt sleep cycling to match cameras FPS)
+			void 			enable_adaptive_fps();
+
+			///	@brief 		Disables adaptive FPS (constant sleep cycling)
+			void 			disable_adaptive_fps();
 
 			///	@brief 		Sets the micro-sleep length (in micro-seconds) when the camera thread is idling
 			void 			set_usleep( uint32_t _n );
