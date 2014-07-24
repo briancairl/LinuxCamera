@@ -63,6 +63,7 @@
 
 	/// Boost Includes
 	#include <boost/thread.hpp>
+	#include <boost/filesystem.hpp>
 
 
 	namespace LC
@@ -85,7 +86,8 @@
  			F_MemMapInit 				, 
 			F_Capturing 				,
 			F_ThreadActive 				,
-			F_ReadingFrame		
+			F_ReadingFrame				,
+			F_ContinuousSaveMode		
 		} Flags;
 
 
@@ -110,6 +112,7 @@
 			struct timeval 	tv;
 
 			std::string 	dev_name;
+			std::string 	dir_name;
 			uint32_t		flags;
 			uint16_t 		frame_width;
 			uint16_t		frame_height;
@@ -137,6 +140,7 @@
 			void 			_Dispatch();
 			void 			_UnDispatch();
 			
+			void 			_AutoSave();
 			bool 			_ReadFrame();
 			void 			_GrabFrame();
 			void 			_StoreFrame(const void *p, int size);
@@ -220,6 +224,9 @@
 
 			/// @brief 		Sets the max length of the frame-capture buffer
 			void 			set_max( uint16_t 	_n );
+
+			/// @brief 		Sets the auto-save directory
+			void 			set_dir( const char* _dir );
 
 			///	@brief		Returns the total number of captured frames
 			uint32_t 		get_capture_count();

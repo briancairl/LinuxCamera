@@ -62,6 +62,9 @@ namespace LC
 				/// Maintain the frame-buffer (auto-release)
 				cam->_RegulateFrameBuffer();
 
+				/// Autosave frames
+				cam->_AutoSave();
+
 				/// Wait Until Next Frame Is Ready
  				usleep(cam->usleep_len_fps);
 			}
@@ -499,6 +502,23 @@ namespace LC
 	} 
 
 
+	void LinuxCamera::_AutoSave()
+	{
+		if( LC_GET_BIT(flags,F_ContinuousSaveMode))
+		{
+			char* fname_buffer[20];
+			
+			switch(pixel_format)
+			{
+				case P_MJPG: sprintf(fname_buffer,"%s/%d.jpeg",dir_name.c_str(),capture_count); break;
+				case P_YUYV: sprintf(fname_buffer,"%s/%d.yuv" ,dir_name.c_str(),capture_count); break;
+				case P_H264: sprintf(fname_buffer,"%s/%d.mkv" ,dir_name.c_str(),capture_count); break;
+				default:     																	break;
+			}
+			cvSaveImage(fname_buffer,frames.front(),NULL);
+		}
+	}
+
 
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -627,6 +647,11 @@ namespace LC
 						fprintf(stderr, LC_MSG("Unrecognized pixel format. Supported : [MJPG | YUYV | H264]"), fname, token.c_str() );
 						exit(EXIT_FAILURE);
 					}
+				}
+				else
+				if(opened&&token=="-autosave")
+				{
+					LC_SET_BIT(flags,F_ContinuousSaveMode);
 				}
 				else
 				{
@@ -760,6 +785,14 @@ namespace LC
 		}
 		else 
 			usleep_len_idle = _n; 
+	}
+
+
+
+	void 	LinuxCamera::set_dir( const char* _dir )
+	{
+		dir_name = _dir;
+		boost::filesystem::create_directories(_dir);
 	}
 
 
