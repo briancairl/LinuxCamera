@@ -9,6 +9,12 @@ structure.
 As the name suggests : Linux support ONLY!
 
 
+## Dependencies
++ V4L[1|2]
++ Boost
++ OpenCV
+
+
 ## Configuration Files
 
 If you choose to setup a camera from a configuration file (reccomended), there are several

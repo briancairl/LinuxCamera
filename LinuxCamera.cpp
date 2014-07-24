@@ -1,15 +1,18 @@
 #include "LinuxCamera.hpp"
 
 
-#define LC_MSG(str)				("LC_MSG : " str "\n")
-#define LC_CLR_BUFFER(x)		memset(&(x), 0, sizeof(x))  
-#define LC_MASK(n)				(uint32_t)(1<<n)
-#define LC_REG_CMP(reg,mask)	(bool)((reg & mask)==mask)
-#define LC_GET_BIT(reg,n) 		(bool)(reg & (1<<n) )
-#define LC_SET_BIT(reg,n) 		reg |=  (1<<n)
-#define LC_CLR_BIT(reg,n) 		reg &= ~(1<<n)
-#define LC_TOG_BIT(reg,n,t)		(t)?(SET_BIT(reg,n)):(CLR_BIT(reg,n))
-#define LC_FPS_ADAPTINC			20UL
+#define LC_MSG(str)							("LC_MSG : " str "\n")
+#define LC_CLR_BUFFER(x)					memset(&(x), 0, sizeof(x))  
+#define LC_MASK(n)							(uint32_t)(1<<n)
+#define LC_REG_CMP(reg,mask)				(bool)((reg & mask)==mask)
+#define LC_GET_BIT(reg,n) 					(bool)(reg & (1<<n) )
+#define LC_SET_BIT(reg,n) 					reg |=  (1<<n)
+#define LC_CLR_BIT(reg,n) 					reg &= ~(1<<n)
+#define LC_TOG_BIT(reg,n,t)					(t)?(SET_BIT(reg,n)):(CLR_BIT(reg,n))
+#define LC_FPS_ADAPTINC						20UL
+
+#define LC_IMG_TS_FMTSTR 					"%s/%_s_%d_%d_%d_%d_%d.%s"			
+#defime LC_IMG_TS_FMTLIST(dir,name,n,ts,ext) dir , name, n , ts.hours, ts.min , ts.sec , ts.millis , ext
 
 namespace LC
 {
@@ -17,6 +20,16 @@ namespace LC
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	/// UTILS
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+	std::ostream&	operator<<( std::ostream& os, const TimeStamp& ts )
+	{
+		os 	<< "H : " <<  ts.hours
+			<< "M : " <<  ts.mins
+			<< "S : " <<  ts.secs
+			<< "m : " <<  ts.millis;
+		return os;
+	}
 
 
 	std::ostream&	operator<<( std::ostream& os, const LinuxCamera& cam )
@@ -43,6 +56,7 @@ namespace LC
 		os << "Framerate  (Actual)   : " << cam.fps_profile		<< " fps"	<< std::endl;
 		os << "Sleep-time (Read)     : " << cam.usleep_len_read	<< " us"	<< std::endl;
 		os << "Sleep-time (Idle)     : " << cam.usleep_len_idle	<< " us"	<< std::endl;
+		os << "Registered Time-stamp : " << cam.timestamp 					<< std::endl;
 		os 																	<< std::endl;
 		os << ":[Flags]" 													<< std::endl;
 		os << "----------------------------------------------------" 		<< std::endl;
@@ -65,6 +79,26 @@ namespace LC
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	/// HELPERS
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+	TimeStamp::TimeStamp( const float time_s )
+	{
+		uint32_t time32 = time_s*1000UL;
+		hours 	= time32%3600000UL; 	time32-= 3600000UL	*hours;
+		mins 	= time32%60000UL; 		time32-= 60000UL	*mins;
+		secs 	= time32%1000UL; 		time32-= 1000UL 	*secs;
+		secs 	= time32%1000UL; 		time32-= 1000UL 	*secs;
+	}
+
+
+
+	TimeStamp( const uint16_t hrs, const uint16_t min, const uint16_t sec, const uint16_t millis )
+	{
+
+
+	}
+
 
 
 	static int xioctl(int fh, int request, void *arg) 
@@ -115,14 +149,14 @@ namespace LC
 				/// Autosave frames
 				cam->_AutoSave();
 
-				/// Wait Until Next Frame Is Ready
- 				usleep(cam->usleep_len_read);
-
  				/// Updated Calculated FPS
  				cam->_UpdateFPSProfile();
 
  				/// Update Adaptive Sleep (Try Match Camera FPS)
  				cam->_UpdateAdaptiveSleep();
+
+				/// Wait Until Next Frame Is Ready
+ 				usleep(cam->usleep_len_read);
 			}
 			else
 			{
@@ -487,7 +521,7 @@ namespace LC
 
 	void LinuxCamera::_RegulateFrameBuffer()
 	{
-		while(!LC_GET_BIT(flags,F_ReadingFrame) && frames.size() > max_size )
+		while(!LC_GET_BIT(flags,F_ReadingFrame) && frames.size() > max_frames )
 			_ScrollFrameBuffer();
 	}
 
@@ -548,9 +582,13 @@ namespace LC
 			}  
 			else
 			{
+				/// Read a frame
 				if(_ReadFrame())
 				{
-					LC_CLR_BIT(flags,F_AdaptiveFPSBackoff);
+					if( LC_GET_BIT(flags,F_AdaptiveFPS) )
+					{
+						LC_CLR_BIT(flags,F_AdaptiveFPSBackoff);
+					}
 					return;
 				}
 				else
@@ -561,10 +599,13 @@ namespace LC
 		}
 
 		/// Program is running faster than camera can give it frames!
-		_BackoffAdaptiveSleep();
+		if( LC_GET_BIT(flags,F_AdaptiveFPS) )
+		{
+			_BackoffAdaptiveSleep();
 
-		// Backoff Sucka!
-		LC_SET_BIT(flags,F_AdaptiveFPSBackoff);
+			// Backoff Sucka!
+			LC_SET_BIT(flags,F_AdaptiveFPSBackoff);
+		}
 	} 
 
 
@@ -572,14 +613,13 @@ namespace LC
 	{
 		if( LC_GET_BIT(flags,F_ContinuousSaveMode))
 		{
-			char fname_buffer[20];
-			
+			char fname_buffer[50UL];
 			switch(pixel_format)
 			{
-				case P_MJPG: sprintf(fname_buffer,"%s/%d.jpeg",dir_name.c_str(),capture_count); break;
-				case P_YUYV: sprintf(fname_buffer,"%s/%d.yuv" ,dir_name.c_str(),capture_count); break;
-				case P_H264: sprintf(fname_buffer,"%s/%d.mkv" ,dir_name.c_str(),capture_count); break;
-				default:     																	break;
+				case P_MJPG: sprintf(fname_buffer,LC_IMG_TS_FMTSTR,LC_IMG_TS_FMTLIST(dir_name.c_str(),"auto",capture_count,timestamp,"jpg")); break;
+				case P_YUYV: sprintf(fname_buffer,LC_IMG_TS_FMTSTR,LC_IMG_TS_FMTLIST(dir_name.c_str(),"auto",capture_count,timestamp,"yuv")); break;
+				case P_H264: sprintf(fname_buffer,LC_IMG_TS_FMTSTR,LC_IMG_TS_FMTLIST(dir_name.c_str(),"auto",capture_count,timestamp,"mkv")); break;
+				default: break;
 			}
 			cvSaveImage(fname_buffer,frames.back(),NULL);
 		}
@@ -650,7 +690,7 @@ namespace LC
 		proc_thread		(NULL),
 		flags 			(0UL),
 		fd 				(-1),
-		max_size		(5UL),
+		max_frames		(5UL),
 		capture_count	(0UL),
 		usleep_len_idle (10000UL),
 		fps_profile		(0.0f)
@@ -671,7 +711,7 @@ namespace LC
 		proc_thread		(NULL),
 		flags 			(0UL),
 		fd 				(-1),
-		max_size		(5UL),
+		max_frames		(5UL),
 		capture_count	(0UL),
 		usleep_len_idle (10000UL),
 		fps_profile		(0.0f)
@@ -740,7 +780,7 @@ namespace LC
 				else
 				if(opened&&token=="-fbuf"	)
 				{
-					fconf >> max_size;
+					fconf >> max_frames;
 				}
 				else
 				if(opened&&token=="-fmt"	)
@@ -815,7 +855,7 @@ namespace LC
 		proc_thread		(NULL),
 		flags 			(0UL),
 		fd 				(-1),
-		max_size		(5UL),
+		max_frames		(5UL),
 		capture_count	(0UL),
 		usleep_len_idle (10000UL),
 		fps_profile		(0.0f)
@@ -837,6 +877,13 @@ namespace LC
 
 		if( LC_GET_BIT(flags,F_DeviceOpen) )
 			_CloseDevice();
+	}
+
+
+
+	uint16_t 	LinuxCamera::size()				
+	{ 
+		return 	frames.size();
 	}
 
 
@@ -887,7 +934,7 @@ namespace LC
 
 
 
-	void 	LinuxCamera::set_max( uint16_t _n ) 	
+	void 	LinuxCamera::set_maxframes( uint16_t _n ) 	
 	{ 	
 		if(_n == 0) 
 		{
@@ -895,25 +942,38 @@ namespace LC
 			exit(EXIT_FAILURE);  
 		}
 		else 
-			max_size = _n; 
+			max_frames = _n; 
 	}
 
 
 
-	void 	LinuxCamera::set_usleep( uint32_t _n )
+	void 	LinuxCamera::set_usleep_idle( uint32_t usec )
 	{
-		if(_n == 0) 
+		if(usec == 0) 
 		{
 			fprintf(stderr,LC_MSG("Idle-sleep len must be NON-ZERO."));  
 			exit(EXIT_FAILURE);  
 		}
 		else 
-			usleep_len_idle = _n; 
+			usleep_len_idle = usec; 
 	}
 
 
 
-	void 	LinuxCamera::set_dir( const char* _dir )
+	void 	LinuxCamera::set_usleep_read( uint32_t usec )
+	{
+		if(usec == 0) 
+		{
+			fprintf(stderr,LC_MSG("Idle-sleep len must be NON-ZERO."));  
+			exit(EXIT_FAILURE);  
+		}
+		else 
+			usleep_len_read = usec; 
+	}
+
+
+
+	void 	LinuxCamera::set_autosavedir( const char* _dir )
 	{
 		dir_name = _dir;
 		boost::filesystem::create_directories(_dir);
@@ -952,21 +1012,60 @@ namespace LC
 		if(frames.empty())
 			false;
 		else
-			return 	cvSaveImage(fname,frames.front(),NULL);
+		{
+			char fname_buffer[50UL];
+			switch(pixel_format)
+			{
+				case P_MJPG: sprintf(fname_buffer,LC_IMG_TS_FMTSTR,LC_IMG_TS_FMTLIST(dir_name.c_str(),fname,capture_count,timestamp,"jpg")); break;
+				case P_YUYV: sprintf(fname_buffer,LC_IMG_TS_FMTSTR,LC_IMG_TS_FMTLIST(dir_name.c_str(),fname,capture_count,timestamp,"yuv")); break;
+				case P_H264: sprintf(fname_buffer,LC_IMG_TS_FMTSTR,LC_IMG_TS_FMTLIST(dir_name.c_str(),fname,capture_count,timestamp,"mkv")); break;
+				default: break;
+			}
+
+			return 	cvSaveImage(fname,frames.back(),NULL);
+		}
 	}
 
 
 
-	void 	LinuxCamera::enable_adaptive_fps()
+	void 	LinuxCamera::enable_fps_matching()
 	{
 		LC_SET_BIT(flags,F_AdaptiveFPS);
 	}
 
 
 
-	void 	LinuxCamera::disable_adaptive_fps()
+	void 	LinuxCamera::disable_fps_matching()
 	{
 		LC_CLR_BIT(flags,F_AdaptiveFPS);
+	}
+
+
+
+	bool 	LinuxCamera::operator>>( cv::Mat& mat_out )
+	{
+		if(!frames.empty())
+		{
+			LC_SET_BIT(flags,F_ReadingFrame);
+
+			mat_out = cvarrToMat(frames.front());
+
+			cvReleaseImage(frames.front());
+			
+			frames.pop_front();
+
+			LC_CLR_BIT(flags,F_ReadingFrame);
+			
+			return true;
+		}
+		return false;
+	}
+
+
+
+	void 	LinuxCamera::operator<<( const TimeStamp& ts );
+	{
+		timestamp = ts;
 	}
 
 }

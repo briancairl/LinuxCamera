@@ -106,6 +106,22 @@
 
 
 
+		class TimeStamp
+		{
+		friend std::ostream&	operator<<( std::ostream& os, const TimeStamp& ts );
+		public:
+			uint16_t 	hours;
+			uint16_t 	mins;
+			uint16_t 	sec;
+			uint16_t 	millis;
+
+			TimeStamp( const float time_s );
+			TimeStamp( const uint16_t hrs, const uint16_t min, const uint16_t sec, const uint16_t millis );
+
+			~TimeStamp() {}
+		};
+
+
 
 		class LinuxCamera
 		{		
@@ -122,17 +138,21 @@
 			uint16_t		frame_height;
 			uint16_t 		framerate;
 			uint16_t 		timeout;
-			uint32_t 		usleep_len_idle;
-			uint32_t 		usleep_len_read;
+
  			PixelFormat 	pixel_format;
 			Buffer*			buffers;
 			FrameBuf		frames;
+
+			uint32_t 		usleep_len_idle;
+			uint32_t 		usleep_len_read;
+
 			uint16_t 		n_buffers;
-			uint16_t 		max_size;
+			uint16_t 		max_frames;
 			uint32_t		capture_count;
 
 			boost::thread* 	proc_thread;
 
+			TimeStamp 		stamp;
 			float 			fps_profile;
 			uint32_t 		fps_profile_framecount;
 			struct timespec fps_profile_pts[2UL];
@@ -206,6 +226,10 @@
 			/// Statuses
 			/////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+
+			/// @brief 		Returns the number of framces currently in the frame-buffer
+			uint16_t 		size();
+
 			/// @brief 		Returns TRUE if camera device was opened successfully and is current capturing (in-thread)
 			bool 			good();
 
@@ -233,32 +257,54 @@
 
 
 			///	@brief 		Enables adaptive FPS (adapt sleep cycling to match cameras FPS)
-			void 			enable_adaptive_fps();
+			void 			enable_fps_matching();
 
 			///	@brief 		Disables adaptive FPS (constant sleep cycling)
-			void 			disable_adaptive_fps();
+			void 			disable_fps_matching();
 
 			///	@brief 		Sets the micro-sleep length (in micro-seconds) when the camera thread is idling
-			void 			set_usleep( uint32_t _n );
+			void 			set_usleep_idle( uint32_t usec );
+
+			///	@brief 		Sets the micro-sleep length (in micro-seconds) between camera reads
+			void 			set_usleep_read( uint32_t usec );
 
 			/// @brief 		Sets the max length of the frame-capture buffer
-			void 			set_max( uint16_t 	_n );
+			void 			set_maxframes( uint16_t _n );
 
 			/// @brief 		Sets the auto-save directory
-			void 			set_dir( const char* _dir );
+			void 			set_autosavedir( const char* _dir );
 
 			///	@brief		Returns the total number of captured frames
 			uint32_t 		get_capture_count();
 
-			/// @brief 		Returns the first un-released frame in the frame buffer
+			/// @brief 		[*UNSAFE] Returns the first un-released frame in the frame buffer. The frame must be
+			///				release manually after processing using operator++(void)
+			///				Safe Alternate : use operator>>(cv::Mat)
+			///
+			///	@return 	IplImage pointer (handle) to decoded image. 
 			IplImage*		get_frame();
 
-			///	@brief 		Saves the first un-released frame to a file
-			bool 			save_frame( const char* fname );
+			///	@brief 		Saves most recently aquired. 
+			///	@param 		fname 		name of the file to be save without extensions (handled with respect to pixel format)
+			bool 			save_frame( const char* fname = "" );
 
-			/// @brief 		Releases first un-released frame and removes it from the frame buffer
+			/// @brief 		[*UNSAFE] Releases first un-released frame and removes it from the frame buffer
+			///				Safe Alternate : use operator>>(cv::Mat)
+			///
 			///	@return 	TRUE 	if the frame buffer is not empty
 			bool 			operator++(void);
+
+			/// @brief 		[*RECCOMENDED] Generate a safe cv::Mat copy of the current frame. The frame is released 
+			///				from the the internal frame-buffer.
+			///			
+			/// @param 		mat_out 	safe-copy of the current frame as an cv::Mat
+			/// @return 	TRUE if the output frame is valid (frame buffer had frames)
+			bool 			operator>>( cv::Mat& mat_out );
+
+			/// @brief 		Feeds external timestamp to camera for frame saves
+			/// @param 		ts 			time-stamp
+			void 			operator<<( const TimeStamp& ts );
+
 		};
 
 	}
