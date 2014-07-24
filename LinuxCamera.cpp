@@ -9,7 +9,7 @@
 #define LC_SET_BIT(reg,n) 		reg |=  (1<<n)
 #define LC_CLR_BIT(reg,n) 		reg &= ~(1<<n)
 #define LC_TOG_BIT(reg,n,t)		(t)?(SET_BIT(reg,n)):(CLR_BIT(reg,n))
-
+#define LC_FPS_ADAPTINC			10UL
 
 namespace LC
 {
@@ -27,9 +27,9 @@ namespace LC
 		os 																	<< std::endl;
 		os << ":[Configurations]" 											<< std::endl;
 		os << "----------------------------------------------------" 		<< std::endl;
-		os << "Device Name        : " << cam.dev_name 						<< std::endl;
-		os << "Autosave Directory : " << cam.dir_name 						<< std::endl;
-		os << "Pixel Format       : ";
+		os << "Device Name           : " << cam.dev_name 					<< std::endl;
+		os << "Autosave Directory    : " << cam.dir_name 					<< std::endl;
+		os << "Pixel Format          : ";
 		switch(cam.pixel_format)
 		{
 			case P_MJPG: os << "MPJG"; break;
@@ -599,18 +599,18 @@ namespace LC
 		/// Update FPS Profile
 		float t_diff = (fps_profile_pts[1].tv_sec - fps_profile_pts[0UL].tv_sec);
 		if( t_diff > 0.0f )
-			fps_profile = (float)fps_profile_framecount/t_diff;
+			fps_profile = (float)(++fps_profile_framecount)/t_diff;
 	}
 
 
 	void LinuxCamera::_UpdateAdaptiveSleep()
 	{
-		if( LC_GET_BIT(flags,F_AdaptiveFPS) && (usleep_len_read > 0) )
+		if( LC_GET_BIT(flags,F_AdaptiveFPS) && (usleep_len_read > LC_FPS_ADAPTINC) )
 		{
 			if( (uint32_t)fps_profile > framerate  )
-				++usleep_len_read;
+				usleep_len_read+=LC_FPS_ADAPTINC;
 			else
-				--usleep_len_read;
+				usleep_len_read-=LC_FPS_ADAPTINC;
 		}
 		else
 		{
