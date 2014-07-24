@@ -53,6 +53,7 @@
 	#include <string>
 	#include <list>
 	#include <fstream>
+	#include <iostream>
 
 
 	/// OpenCV Includes
@@ -106,7 +107,8 @@
 
 		class LinuxCamera
 		{		
-		friend void 		s_capture_loop( LinuxCamera* cam );
+		friend void 			s_capture_loop( LinuxCamera* cam );
+		friend std::ostream&	operator<<( std::ostream& os, const LinuxCamera& cam );
 		private:
 			int 			fd;
 			struct timeval 	tv;
@@ -120,15 +122,17 @@
 			uint16_t 		timeout;
 			uint32_t 		usleep_len_idle;
 			uint32_t 		usleep_len_fps;
-
  			PixelFormat 	pixel_format;
 			Buffer*			buffers;
-			uint16_t 		n_buffers;
 			FrameBuf		frames;
+			uint16_t 		n_buffers;
 			uint16_t 		max_size;
 			uint32_t		capture_count;
 
 			boost::thread* 	proc_thread;
+
+			float 			fps_profile;
+			struct timespec fps_profile_pts[2UL];
 
 			void 			_InitMMap(void);
 			void 			_OpenDevice(void);

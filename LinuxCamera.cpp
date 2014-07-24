@@ -15,6 +15,50 @@ namespace LC
 {
 
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	/// UTILS
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+	std::ostream&	operator<<( std::ostream& os, const LinuxCamera& cam )
+	{
+		#define BITSTAT(_n) 	(LC_GET_BIT(cam.flags,_n) ? "YES" : "NO")
+
+		os << "===================================================" 	<< std::endl;
+		os 																<< std::endl;
+		os << ":[Configurations]" 										<< std::endl;
+		os << "----------------------------------------------------" 	<< std::endl;
+		os << "Device Name        : " << cam.dev_name 					<< std::endl;
+		os << "Autosave Directory : " << cam.dir_name 					<< std::endl;
+		os << "Pixel Format       : ";
+		switch(cam.pixel_format)
+		{
+			case P_MJPG: os << "MPJG"; break;
+			case P_YUYV: os << "YUYV"; break;
+			case P_H264: os << "H264"; break;
+		}
+		os << std::endl;
+		os << "Frame Width        : " << cam.frame_width 				<< std::endl;
+		os << "Frame Height       : " << cam.frame_height				<< std::endl;
+		os << "Framerate          : " << cam.framerate				    << std::endl;
+		os << "Framerate (Actual) : " << cam.fps_profile				<< std::endl;
+		os 																<< std::endl;
+		os << ":[Flags]" 												<< std::endl;
+		os << "----------------------------------------------------" 	<< std::endl;
+		os << "Device Open        : " << BITSTAT(F_DeviceOpen)			<< std::endl;
+		os << "Device Init        : " << BITSTAT(F_DeviceInit)			<< std::endl;
+		os << "Memory-Map Init    : " << BITSTAT(F_MemMapInit)			<< std::endl;
+		os << "Capturing          : " << BITSTAT(F_Capturing )			<< std::endl;
+		os << "Thread Running     : " << BITSTAT(F_ThreadActive)		<< std::endl;
+		os << "Reading Frame      : " << BITSTAT(F_ReadingFrame)		<< std::endl;
+		os << "AutoSave Enabled   : " << BITSTAT(F_ContinuousSaveMode)	<< std::endl;
+		os << "===================================================" 	<< std::endl;
+		return os;
+
+		#undef BITSTAT
+	}
+
+
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	/// HELPERS
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -56,6 +100,9 @@ namespace LC
 		{
 			if( LC_GET_BIT(cam->flags, F_Capturing) )
 			{
+				/// Profiling Clock-Start
+				clock_gettime(CLOCK_MONOTONIC,cam->fps_profile_pts+0UL);
+
 				/// Grab next frame
 				cam->_GrabFrame();
 
@@ -67,6 +114,16 @@ namespace LC
 
 				/// Wait Until Next Frame Is Ready
  				usleep(cam->usleep_len_fps);
+
+ 				/// Profiling Clock-End
+ 				clock_gettime(CLOCK_MONOTONIC,cam->fps_profile_pts+1UL);
+
+ 				/// Update FPS Profile
+ 				float t_diff = (cam->fps_profile_pts[1].tv_sec - cam->fps_profile_pts[0UL].tv_sec);
+ 				if( t_diff > 0.0f )
+ 				{
+ 					cam->fps_profile += (0.1f)*( (1.0f/t_diff) - cam->fps_profile );
+ 				}
 			}
 			else
 			{
@@ -506,7 +563,7 @@ namespace LC
 	{
 		if( LC_GET_BIT(flags,F_ContinuousSaveMode))
 		{
-			char* fname_buffer[20];
+			char fname_buffer[20];
 			
 			switch(pixel_format)
 			{
@@ -515,7 +572,7 @@ namespace LC
 				case P_H264: sprintf(fname_buffer,"%s/%d.mkv" ,dir_name.c_str(),capture_count); break;
 				default:     																	break;
 			}
-			cvSaveImage(fname_buffer,frames.front(),NULL);
+			cvSaveImage(fname_buffer,frames.back(),NULL);
 		}
 	}
 
@@ -541,7 +598,8 @@ namespace LC
 		fd 				(-1),
 		max_size		(5UL),
 		capture_count	(0UL),
-		usleep_len_idle (10000UL)
+		usleep_len_idle (10000UL),
+		fps_profile		(0.0f)
 	{
 	}
 
@@ -561,7 +619,8 @@ namespace LC
 		fd 				(-1),
 		max_size		(5UL),
 		capture_count	(0UL),
-		usleep_len_idle 		(10000UL)
+		usleep_len_idle (10000UL),
+		fps_profile		(0.0f)
 	{
 		std::ifstream 	fconf(fname);
 		std::string 	token;
@@ -593,6 +652,11 @@ namespace LC
 				if(opened&&token=="-dev"	)
 				{
 					fconf >> dev_name;
+				}
+				else
+				if(opened&&token=="-dir"	)
+				{
+					fconf >> dir_name;
 				}
 				else
 				if(opened&&token=="-w"		)
@@ -694,7 +758,8 @@ namespace LC
 		fd 				(-1),
 		max_size		(5UL),
 		capture_count	(0UL),
-		usleep_len_idle 		(10000UL)
+		usleep_len_idle (10000UL),
+		fps_profile		(0.0f)
 	{
 		_OpenDevice();
 		_InitDevice();
