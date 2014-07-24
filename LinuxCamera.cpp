@@ -24,10 +24,10 @@ namespace LC
 
 	std::ostream&	operator<<( std::ostream& os, const TimeStamp& ts )
 	{
-		os 	<< "H : " <<  ts.hours
-			<< "M : " <<  ts.mins
-			<< "S : " <<  ts.secs
-			<< "m : " <<  ts.millis;
+		os 	<< "H  : " <<  ts.hours << " , "
+			<< "M  : " <<  ts.mins 	<< " , "
+			<< "S  : " <<  ts.secs	<< " , "
+			<< "ms : " <<  ts.millis;
 		return os;
 	}
 
