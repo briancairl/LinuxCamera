@@ -26,15 +26,10 @@
 	#endif
 
 	
-	/// Compile with ColorBlob detection support by defualt
-	#ifndef LC_WITH_COLORBLOB_SUPPORT
-	#define LC_WITH_COLORBLOB_SUPPORT  	1
-	#endif 
-
 
 	/// Default Frame-buffer len
 	#ifndef LC_FRAMEBUFFER_LEN
-	#define LC_FRAMEBUFFER_LEN 			5
+	#define LC_FRAMEBUFFER_LEN 			10
 	#endif
 	
 
@@ -141,69 +136,7 @@
 			{}
 		};
 
-
-
-
-		#if LC_WITH_COLORBLOB_SUPPORT /*default*/
-
-		/// @brief Color-blob specification struction
-		class ColorBlob_spec
-		{
-		friend class ColorBlob_res;
-		private:
-			uint8_t 	bgr_target[3UL];
-		public:
-
-
-			/// @brief 	Returns percent matching between the input pixel and the spec parameters (quadratic weighting )
-			float operator==( uint8_t pixel[3UL] );
-
-
-			ColorBlob_spec()
-			{
-				bgr_target[2UL] = 
-				bgr_target[1UL] = 
-				bgr_target[0UL] = 0UL;
-			}
-
-
-			ColorBlob_spec( 
-				const uint8_t red ,
-				const uint8_t blue,
-				const uint8_t green
-
-			) {
-				bgr_target[2UL] = red;
-				bgr_target[1UL] = blue;
-				bgr_target[0UL] = green;
-			} 
-
-			~ColorBlob_spec() 
-			{}
-		};
-
-
-
-		/// @brief	Weighted-sum based color-blob detection structure
-		class ColorBlob_res
-		{
-		private:
-			cv::Point2f pt;
-			float 		saturation;	
-		public:
-
-			void 		perform( IplImage* img, const ColorBlob_spec& spec ); 
-
-			ColorBlob_res() : 
-				saturation(0.0f)
-			{}
-
-			~ColorBlob_res() 
-			{}
-		};
-
-		#endif
-
+		
 
 
 		/// @brief	A USB-Camera handle for Linux
@@ -371,24 +304,11 @@
 			///	@brief		Returns the total number of captured frames
 			uint32_t 		get_capture_count();
 
-			/// @brief 		[*UNSAFE] Returns the first un-released frame in the frame buffer. The frame must be
-			///				release manually after processing using operator++(void)
-			///				Safe Alternate : use operator>>(cv::Mat)
-			///
-			///	@return 	IplImage pointer (handle) to decoded image. 
-			IplImage*		get_frame();
-
 			///	@brief 		Saves most recently aquired. 
 			///	@param 		fname 		name of the file to be save without extensions (handled with respect to pixel format)
 			bool 			save_frame( const char* fname = "" );
 
-			/// @brief 		[*UNSAFE] Releases first un-released frame and removes it from the frame buffer
-			///				Safe Alternate : use operator>>(cv::Mat)
-			///
-			///	@return 	TRUE 	if the frame buffer is not empty
-			bool 			operator++(void);
-
-			/// @brief 		[*RECCOMENDED] Generate a safe cv::Mat copy of the current frame. The frame is released 
+			/// @brief 		Generate a safe cv::Mat copy of the current frame. The frame is released 
 			///				from the the internal frame-buffer.
 			///			
 			/// @param 		mat_out 	safe-copy of the current frame as an cv::Mat
@@ -398,24 +318,6 @@
 			/// @brief 		Feeds external timestamp to camera for frame saves
 			/// @param 		ts 			time-stamp
 			void 			operator<<( const TimeStamp& ts );
-
-
-			#if LC_WITH_COLORBLOB_SUPPORT /*default*/
-
-			/// @brief 		Locates color blob with respect to registered ColorBlob_spec 
-			///				NOTE: Automatically releases current frame after processing.
-			///		
-			/// @param 		blob_out 	Resulting Color-Blob output
-			/// @return 	TRUE if the output structur is valid
-			bool 			operator>>( ColorBlob_res& blob_out );
-
-
-			/// @brief 		Used to register ColorBlob_spec
-			/// @param 		blob_spec	ColorBlob_spec to register
-			/// @return 	TRUE if the output frame is valid (frame buffer had frames)
-			void 			operator<<( ColorBlob_spec& blob_spec );
-
-			#endif
 		};
 	}
 
