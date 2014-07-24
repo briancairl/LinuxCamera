@@ -25,6 +25,13 @@
 	#error 	GNU-Linux only!
 	#endif
 
+	
+	/// Compile with ColorBlob detection support by defualt
+	#ifndef LC_WITH_COLORBLOB_SUPPORT
+	#define LC_WITH_COLORBLOB_SUPPORT  	1
+	#endif 
+
+	
 	/// C-STD
 	#include <stdio.h>  
 	#include <stdlib.h>  
@@ -69,7 +76,9 @@
 
 	namespace LC
 	{
-
+		class LinuxCamera;
+		class ColorBlob_result;
+		class ColorBlob_spec;
 
 		typedef enum __LC_PixelFormat__
 		{
@@ -106,6 +115,7 @@
 
 
 
+		/// @brief 	Timestamp support structure with conversion support from floating-point time-count
 		class TimeStamp
 		{
 		friend std::ostream&	operator<<( std::ostream& os, const TimeStamp& ts );
@@ -125,17 +135,7 @@
 
 
 
-		class ColorBlob_Result
-		{
-		public:
-			cv::Point2f pt;
-
-
-		};
-
-
-
-
+		/// @brief	A USB-Camera handle for Linux
 		class LinuxCamera
 		{		
 		friend void 			s_capture_loop( LinuxCamera* cam );
@@ -191,6 +191,10 @@
 			void 			_UpdateFPSProfile();
 			void 			_UpdateAdaptiveSleep();
 			void 			_BackoffAdaptiveSleep();
+
+			#if LC_WITH_COLORBLOB_SUPPORT /*default*/
+			ColorBlob_spec	color_blob_spec;
+			#endif
 		public:
 
 			/// @brief 		Default
@@ -318,8 +322,78 @@
 			/// @param 		ts 			time-stamp
 			void 			operator<<( const TimeStamp& ts );
 
+
+			#if LC_WITH_COLORBLOB_SUPPORT /*default*/
+
+			/// @brief 		Locates color blob with respect to registered ColorBlob_spec 
+			///				NOTE: Automatically releases current frame after processing.
+			///		
+			/// @param 		blob_out 	Resulting Color-Blob output
+			/// @return 	TRUE if the output structur is valid
+			bool 			operator>>( ColorBlob_result& blob_out );
+
+
+			/// @brief 		Used to register ColorBlob_spec
+			/// @param 		blob_spec	ColorBlob_spec to register
+			/// @return 	TRUE if the output frame is valid (frame buffer had frames)
+			void 			operator<<( ColorBlob_result& blob_spec );
+
+			#endif
 		};
 
+
+
+		#if LC_WITH_COLORBLOB_SUPPORT /*default*/
+
+
+		/// @brief Color-blob specification struction
+		class ColorBlob_spec
+		{
+		friend class ColorBlob_result;
+		private:
+			uint8_t 	rbg_target[3UL];
+		public:
+
+
+			/// @brief 	Returns percent matching between the input pixel and the spec parameters (quadratic weighting )
+			float operator==( uint8_t pixel[3UL] );
+
+
+			ColorBlob_spec( 
+				const uint8_t red 		=  0UL,
+				const uint8_t blue		=  0UL,
+				const uint8_t green 	=  0UL
+
+			) {
+				rbg_target[2UL] = red;
+				rbg_target[1UL] = blue;
+				rbg_target[0UL] = green;
+			} 
+
+			~ColorBlob_spec() 
+			{}
+		};
+
+
+
+		/// @brief	Weighted-sum based color-blob detection structure
+		class ColorBlob_result
+		{
+		private:
+			cv::Point2f pt;
+			float 		saturation;	
+			void 		_Perform( IplImage* img, const ColorBlob_spec& spec ); 
+		public:
+
+			ColorBlob_res() : 
+				saturation(0.0f)
+			{}
+
+			~ColorBlob_res() 
+			{}
+		};
+
+		#endif
 	}
 
 #endif 	

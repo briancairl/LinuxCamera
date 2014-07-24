@@ -1,6 +1,7 @@
 #include "LinuxCamera.hpp"
 
 
+/// Impl Convience Macros
 #define LC_MSG(str)							("LC_MSG : " str "\n")
 #define LC_CLR_BUFFER(x)					memset(&(x), 0, sizeof(x))  
 #define LC_MASK(n)							(uint32_t)(1<<n)
@@ -9,10 +10,21 @@
 #define LC_SET_BIT(reg,n) 					reg |=  (1<<n)
 #define LC_CLR_BIT(reg,n) 					reg &= ~(1<<n)
 #define LC_TOG_BIT(reg,n,t)					(t)?(SET_BIT(reg,n)):(CLR_BIT(reg,n))
-#define LC_FPS_ADAPTINC						20UL
 
+/// File-name formatting
 #define LC_IMG_TS_FMTSTR 					"%s/%s_%d_%d_%d_%d_%d.%s"			
 #define LC_IMG_TS_FMTLIST(dir,name,n,ts,ext) dir,name,n,ts.hours,ts.mins,ts.secs,ts.millis,ext
+
+/// IPL Macros
+#define LC_IPL_R 							2UL
+#define LC_IPL_G							1UL
+#define LC_IPL_B							0UL
+#define LC_IPL_ITR(img,i,j,c) 				img->imageData[i*(img->nChannels*img->width) + j*img->nChannels + c]
+#define LC_IPL_PXL(img,i,j) 				(img->imageData + i*(img->nChannels*img->width) + j*img->nChannels)
+
+/// Constants
+#define LC_FPS_ADAPTINC						20UL
+
 
 namespace LC
 {
@@ -1059,6 +1071,7 @@ namespace LC
 		{
 			LC_SET_BIT(flags,F_ReadingFrame);
 
+			///Convert to cv::Mat
 			mat_out = cv::cvarrToMat(frames.front());
 
 			cvReleaseImage(&frames.front());
@@ -1078,5 +1091,76 @@ namespace LC
 	{
 		timestamp = ts;
 	}
+
+
+
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	/// COLORBLOB SUPPORT
+	/////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+	#if LC_WITH_COLORBLOB_SUPPORT
+
+
+	float ColorBlob_spec::operator==( uint8_t pixel[3UL] )
+	{
+		const float denom 	= 765.0f;
+		float 		result 	= 0.0f;
+
+		for( size_t idx = 0; idx < 3UL; idx ++ )
+			result += powf( ((float)pixe[idx] - (float)bgr_track)/denom, 2.0f );
+
+		return result;
+	}
+
+
+
+	void ColorBlob_res::_Perform( IplImage* img, const ColorBlob_spec& spec )
+	{
+		float weight;
+		for(size_t i = 0; i < img->height; i++) //height of frame pixels
+		{
+			for(size_t j = 0; j < img->width; j++) //width of frame pixels
+			{
+				weight = (spec == LC_IPL_PXL(img,i,j));
+
+				pt.x 		+= (float)j;
+				pt.y 		+= (float)i;
+				saturation 	+= weight;
+			}
+		}
+		saturation /= (float)(img->height*img->width);
+	}
+
+
+
+	bool LinuxCamera::operator>>( ColorBlob_result& blob_out )
+	{
+		if(!frames.empty())
+		{
+			LC_SET_BIT(flags,F_ReadingFrame);
+
+			/// Perform mean-blob algorithm internal to ColorBlob_result
+			blob._Perform(frames.front(),color_blob_spec);
+
+			cvReleaseImage(&frames.front());
+			
+			frames.pop_front();
+
+			LC_CLR_BIT(flags,F_ReadingFrame);
+			
+			return true;
+		}
+		return false;
+	}
+
+
+
+	void LinuxCamera::operator<<( ColorBlob_result& blob_spec )
+	{
+		color_blob_spec = blob_spec;
+	}
+
+	#endif
 
 }
