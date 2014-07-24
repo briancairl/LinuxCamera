@@ -88,6 +88,42 @@ namespace LC
 	}
 
 
+	#if LC_WITH_COLORBLOB_SUPPORT
+
+	float ColorBlob_spec::operator==( uint8_t pixel[3UL] )
+	{
+		const float denom 	= 765.0f;
+		float 		result 	= 0.0f;
+
+		for( size_t idx = 0; idx < 3UL; idx ++ )
+			result += powf( ((float)pixel[idx] - (float)bgr_target[idx])/denom, 2.0f );
+
+		return result;
+	}
+
+
+
+	void ColorBlob_res::perform( IplImage* img, const ColorBlob_spec& spec )
+	{
+		float weight;
+		for(size_t i = 0; i < img->height; i++) //height of frame pixels
+		{
+			for(size_t j = 0; j < img->width; j++) //width of frame pixels
+			{
+				weight = (spec == LC_IPL_PXL(img,i,j));
+
+				pt.x 		+= (float)j;
+				pt.y 		+= (float)i;
+				saturation 	+= weight;
+			}
+		}
+		saturation /= (float)(img->height*img->width);
+	}
+
+	#endif
+
+
+
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	/// HELPERS
 	/////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -516,8 +552,10 @@ namespace LC
 		// Get raw image from buffer
 		CvMat mat = cvMat(frame_height, frame_width,CV_8UC3,(void*)p);  
 
-		// Decode the image  
+		// Decode the image and add it to the frame-buffer
+		LC_SET_BIT(flags,F_WritingFrame);
 		frames.push_back(cvDecodeImage(&mat, 1));
+		LC_CLR_BIT(flags,F_WritingFrame);
 
 		// Count the capture
 		++capture_count;
@@ -1010,6 +1048,11 @@ namespace LC
 	}
 
 
+	bool LinuxCamera::get_flag( Flags qry_flag )
+	{
+		return LC_GET_BIT(flags,qry_flag);
+	}
+
 
 	bool 	LinuxCamera::operator++(void)
 	{
@@ -1067,6 +1110,8 @@ namespace LC
 
 	bool 	LinuxCamera::operator>>( cv::Mat& mat_out )
 	{
+		while(LC_GET_BIT(flags,F_WritingFrame));
+
 		if(!frames.empty())
 		{
 			LC_SET_BIT(flags,F_ReadingFrame);
@@ -1075,7 +1120,7 @@ namespace LC
 			mat_out = cv::cvarrToMat(frames.front());
 
 			cvReleaseImage(&frames.front());
-			
+		
 			frames.pop_front();
 
 			LC_CLR_BIT(flags,F_ReadingFrame);
@@ -1101,52 +1146,21 @@ namespace LC
 
 	#if LC_WITH_COLORBLOB_SUPPORT
 
-
-	float ColorBlob_spec::operator==( uint8_t pixel[3UL] )
+	bool LinuxCamera::operator>>( ColorBlob_res& blob_out )
 	{
-		const float denom 	= 765.0f;
-		float 		result 	= 0.0f;
+		while(LC_GET_BIT(flags,F_WritingFrame));
 
-		for( size_t idx = 0; idx < 3UL; idx ++ )
-			result += powf( ((float)pixe[idx] - (float)bgr_track)/denom, 2.0f );
-
-		return result;
-	}
-
-
-
-	void ColorBlob_res::_Perform( IplImage* img, const ColorBlob_spec& spec )
-	{
-		float weight;
-		for(size_t i = 0; i < img->height; i++) //height of frame pixels
-		{
-			for(size_t j = 0; j < img->width; j++) //width of frame pixels
-			{
-				weight = (spec == LC_IPL_PXL(img,i,j));
-
-				pt.x 		+= (float)j;
-				pt.y 		+= (float)i;
-				saturation 	+= weight;
-			}
-		}
-		saturation /= (float)(img->height*img->width);
-	}
-
-
-
-	bool LinuxCamera::operator>>( ColorBlob_result& blob_out )
-	{
 		if(!frames.empty())
 		{
 			LC_SET_BIT(flags,F_ReadingFrame);
 
-			/// Perform mean-blob algorithm internal to ColorBlob_result
-			blob._Perform(frames.front(),color_blob_spec);
+			/// Perform mean-blob algorithm internal to ColorBlob_res
+			blob_out.perform(frames.front(),color_blob_spec);
 
 			cvReleaseImage(&frames.front());
-			
-			frames.pop_front();
 
+			frames.pop_front();
+			
 			LC_CLR_BIT(flags,F_ReadingFrame);
 			
 			return true;
@@ -1156,7 +1170,7 @@ namespace LC
 
 
 
-	void LinuxCamera::operator<<( ColorBlob_result& blob_spec )
+	void LinuxCamera::operator<<( ColorBlob_spec& blob_spec )
 	{
 		color_blob_spec = blob_spec;
 	}

@@ -77,7 +77,7 @@
 	namespace LC
 	{
 		class LinuxCamera;
-		class ColorBlob_result;
+		class ColorBlob_res;
 		class ColorBlob_spec;
 
 		typedef enum __LC_PixelFormat__
@@ -97,6 +97,7 @@
 			F_Capturing 				,
 			F_ThreadActive 				,
 			F_ReadingFrame				,
+			F_WritingFrame				,
 			F_ContinuousSaveMode		,
 			F_AdaptiveFPS				,
 			F_AdaptiveFPSBackoff
@@ -132,6 +133,68 @@
 			~TimeStamp() {}
 		};
 
+
+
+
+		#if LC_WITH_COLORBLOB_SUPPORT /*default*/
+
+		/// @brief Color-blob specification struction
+		class ColorBlob_spec
+		{
+		friend class ColorBlob_res;
+		private:
+			uint8_t 	bgr_target[3UL];
+		public:
+
+
+			/// @brief 	Returns percent matching between the input pixel and the spec parameters (quadratic weighting )
+			float operator==( uint8_t pixel[3UL] );
+
+
+			ColorBlob_spec()
+			{
+				bgr_target[2UL] = 
+				bgr_target[1UL] = 
+				bgr_target[0UL] = 0UL;
+			}
+
+
+			ColorBlob_spec( 
+				const uint8_t red ,
+				const uint8_t blue,
+				const uint8_t green
+
+			) {
+				bgr_target[2UL] = red;
+				bgr_target[1UL] = blue;
+				bgr_target[0UL] = green;
+			} 
+
+			~ColorBlob_spec() 
+			{}
+		};
+
+
+
+		/// @brief	Weighted-sum based color-blob detection structure
+		class ColorBlob_res
+		{
+		private:
+			cv::Point2f pt;
+			float 		saturation;	
+		public:
+
+			void 		perform( IplImage* img, const ColorBlob_spec& spec ); 
+
+			ColorBlob_res() : 
+				saturation(0.0f)
+			{}
+
+			~ColorBlob_res() 
+			{}
+		};
+
+		#endif
 
 
 
@@ -204,14 +267,17 @@
 			/// @brief 		Constructor from configuration-file.
 			///				Allowed Configuration File Tokens:
 			/// 			===================================
-			///				+ '-start'	marks the beggining of a configuration profile
-			///				+ '-end'	marks the end of a configuration profile
- 			/// 			+ '-dev'	device name
-			/// 			+ '-w'		frame width
-			/// 			+ '-h'		frame height
-			/// 			+ '-fps'	framerate
-			/// 			+ '-t'		timeout (non-zero)
-			/// 			+ '-us'		usleep length (us)
+			///				+ '-start'		marks the beggining of a configuration profile
+			///				+ '-end'		marks the end of a configuration profile
+ 			/// 			+ '-dev'		device name
+			/// 			+ '-w'			frame width
+			/// 			+ '-h'			frame height
+			/// 			+ '-fps'		framerate
+			/// 			+ '-t'			timeout (non-zero)
+			/// 			+ '-us'			usleep length (us)
+			///				+ '-dir'		auto-save directory specifier
+			/// 			+ '-autofps'	allows sleep-cycling to adjust to match camera fps
+			/// 			+ '-autosave'	automatically saves each new frame to specified save directory
 			/// 			+ '-fbuf'	max frame buffer size (non-zero)
 			///
 			///	@param 		fname 		config file name (*.conf)
@@ -291,6 +357,10 @@
 			/// @brief 		Sets the auto-save directory
 			void 			set_autosavedir( const char* _dir );
 
+			///	@brief		Returns the state of a flag
+			///	@param 		qry_flag 	type of flag being queried
+			bool 			get_flag( Flags qry_flag );
+
 			///	@brief		Returns the total number of captured frames
 			uint32_t 		get_capture_count();
 
@@ -330,70 +400,16 @@
 			///		
 			/// @param 		blob_out 	Resulting Color-Blob output
 			/// @return 	TRUE if the output structur is valid
-			bool 			operator>>( ColorBlob_result& blob_out );
+			bool 			operator>>( ColorBlob_res& blob_out );
 
 
 			/// @brief 		Used to register ColorBlob_spec
 			/// @param 		blob_spec	ColorBlob_spec to register
 			/// @return 	TRUE if the output frame is valid (frame buffer had frames)
-			void 			operator<<( ColorBlob_result& blob_spec );
+			void 			operator<<( ColorBlob_spec& blob_spec );
 
 			#endif
 		};
-
-
-
-		#if LC_WITH_COLORBLOB_SUPPORT /*default*/
-
-
-		/// @brief Color-blob specification struction
-		class ColorBlob_spec
-		{
-		friend class ColorBlob_result;
-		private:
-			uint8_t 	rbg_target[3UL];
-		public:
-
-
-			/// @brief 	Returns percent matching between the input pixel and the spec parameters (quadratic weighting )
-			float operator==( uint8_t pixel[3UL] );
-
-
-			ColorBlob_spec( 
-				const uint8_t red 		=  0UL,
-				const uint8_t blue		=  0UL,
-				const uint8_t green 	=  0UL
-
-			) {
-				rbg_target[2UL] = red;
-				rbg_target[1UL] = blue;
-				rbg_target[0UL] = green;
-			} 
-
-			~ColorBlob_spec() 
-			{}
-		};
-
-
-
-		/// @brief	Weighted-sum based color-blob detection structure
-		class ColorBlob_result
-		{
-		private:
-			cv::Point2f pt;
-			float 		saturation;	
-			void 		_Perform( IplImage* img, const ColorBlob_spec& spec ); 
-		public:
-
-			ColorBlob_res() : 
-				saturation(0.0f)
-			{}
-
-			~ColorBlob_res() 
-			{}
-		};
-
-		#endif
 	}
 
 #endif 	

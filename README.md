@@ -15,6 +15,10 @@ As the name suggests : Linux support ONLY!
 + OpenCV
 
 
+## Compiler Flags
++ LC_WITH_COLORBLOB_SUPPORT = 1 : compiles LinuxCamera with simple color-blob tracking supports
+
+
 ## Configuration Files
 
 If you choose to setup a camera from a configuration file (reccomended), there are several
