@@ -759,6 +759,7 @@ namespace LC
 				{
 					LC_SET_BIT(flags,F_ContinuousSaveMode);
 				}
+				else
 				if(opened&&token=="-autofps")
 				{
 					LC_SET_BIT(flags,F_AdaptiveFPS);
