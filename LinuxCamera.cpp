@@ -11,7 +11,7 @@
 #define LC_TOG_BIT(reg,n,t)					(t)?(SET_BIT(reg,n)):(CLR_BIT(reg,n))
 #define LC_FPS_ADAPTINC						20UL
 
-#define LC_IMG_TS_FMTSTR 					"%s/%_s_%d_%d_%d_%d_%d.%s"			
+#define LC_IMG_TS_FMTSTR 					"%s/%s_%d_%d_%d_%d_%d.%s"			
 #define LC_IMG_TS_FMTLIST(dir,name,n,ts,ext) dir,name,n,ts.hours,ts.mins,ts.secs,ts.millis,ext
 
 namespace LC
