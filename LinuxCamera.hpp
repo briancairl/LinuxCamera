@@ -193,6 +193,7 @@
 			void 			_StoreFrame(const void *p, int size);
 			void 			_ClearFrameBuffer();
 			bool 			_ScrollFrameBuffer();
+			bool 			_ScrollFrameBuffer_nr();
 
 			void 			_ResetFPSProfile();
 			void 			_UpdateFPSProfile();
@@ -308,12 +309,22 @@
 			///	@param 		fname 		name of the file to be save without extensions (handled with respect to pixel format)
 			bool 			save_frame( const char* fname = "" );
 
-			/// @brief 		Generate a safe cv::Mat copy of the current frame. The frame is released 
+			/// @brief 		Generates a safe cv::Mat copy of the current frame. The frame is released 
 			///				from the the internal frame-buffer.
 			///			
 			/// @param 		mat_out 	safe-copy of the current frame as an cv::Mat
 			/// @return 	TRUE if the output frame is valid (frame buffer had frames)
 			bool 			operator>>( cv::Mat& mat_out );
+
+
+			/// @brief 		Generates a safe IplImage* copy of the current frame. The frame is NOT released 
+			///				from the the internal frame-buffer after this function is called. cvReleaseFrame(...)
+			///				must be called byt the user thereafter
+			///			
+			/// @param 		mat_out 	safe-copy of the current frame as an cv::Mat
+			/// @return 	TRUE if the output frame is valid (frame buffer had frames)
+			bool 			operator>>( IplImage*& ipl_out );
+
 
 			/// @brief 		Feeds external timestamp to camera for frame saves
 			/// @param 		ts 			time-stamp

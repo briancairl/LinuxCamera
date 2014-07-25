@@ -569,6 +569,22 @@ namespace LC
 
 
 
+	bool LinuxCamera::_ScrollFrameBuffer_nr()
+	{
+		if( frames_avail )
+		{
+			frames[frame_rd_itr] = NULL;
+
+			++frame_rd_itr %= LC_FRAMEBUFFER_LEN;
+
+			--frames_avail;
+
+			return true;
+		}
+		return false;
+	}
+
+
 	void LinuxCamera::_ClearFrameBuffer()
 	{
 		for( size_t idx = 0; idx < LC_FRAMEBUFFER_LEN; idx++ )
@@ -1081,7 +1097,31 @@ namespace LC
 			///Convert to cv::Mat
 			mat_out = cv::cvarrToMat(frames.front());
 
+			/// Scroll without release
 			_ScrollFrameBuffer();
+
+			LC_CLR_BIT(flags,F_ReadingFrame);
+			
+			return true;
+		}
+		return false;
+	}
+
+
+
+	bool 	LinuxCamera::operator>>( IplImage*& ipl_out )
+	{
+		while(LC_GET_BIT(flags,F_WritingFrame));
+
+		if(frames_avail)
+		{
+			LC_SET_BIT(flags,F_ReadingFrame);
+
+			/// Pass the IplImage
+			ipl_out = frames[frame_rd_itr];
+
+			/// Scroll without release
+			_ScrollFrameBuffer_nr();
 
 			LC_CLR_BIT(flags,F_ReadingFrame);
 			
@@ -1096,6 +1136,5 @@ namespace LC
 	{
 		timestamp = ts;
 	}
-
 
 }
